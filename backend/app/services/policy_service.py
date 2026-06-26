@@ -82,6 +82,10 @@ class PolicyService:
         allowed = json.loads(policy.allowed_tools)
         if allowed and tool_name not in allowed:
             return False, f"Tool '{tool_name}' is not in allowed tools for policy '{policy.name}'"
-        if policy.permission_expiry and datetime.now(timezone.utc) > policy.permission_expiry:
-            return False, "Permission has expired"
+        if policy.permission_expiry:
+            expiry = policy.permission_expiry
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry:
+                return False, "Permission has expired"
         return True, "Tool is allowed"
