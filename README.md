@@ -7,13 +7,13 @@ AgentGuard is a runtime security platform that sits between AI agents and the to
 ## Architecture
 
 ```
-User / Agent
-    │
-    ▼
-┌─────────────────┐
-│ Runtime Gateway  │  ← Request interception
-└──────┬──────────┘
-       │
+           User / Agent
+               │
+               ▼
+      ┌─────────────────┐
+      │ Runtime Gateway │  ← Request interception
+      └──────┬──────────┘
+             │
        ├──────────────┐
        ▼              ▼
 ┌────────────┐ ┌────────────┐
@@ -23,21 +23,21 @@ User / Agent
        │              │
        └──────┬───────┘
               ▼
-┌─────────────────┐
-│  Behavior Engine │  ← Anomaly detection (Isolation Forest)
-└──────┬──────────┘
-       ▼
-┌─────────────────┐
-│    Risk Engine   │  ← Risk scoring 0-100
-└──────┬──────────┘
-       ▼
-┌─────────────────┐
-│Execution Engine  │  ← Tool execution + HoneyTools
-└──────┬──────────┘
-       ▼
-┌─────────────────┐
-│   Audit Engine   │  ← Complete audit trail
-└─────────────────┘
+     ┌─────────────────┐
+     │  Behavior Engine│  ← Anomaly detection (Isolation Forest)
+     └──────┬──────────┘
+            ▼
+     ┌─────────────────┐
+     │    Risk Engine  │  ← Risk scoring 0-100
+     └──────┬──────────┘
+            ▼
+     ┌─────────────────┐
+     │Execution Engine │  ← Tool execution + HoneyTools
+     └──────┬──────────┘
+            ▼
+    ┌─────────────────┐
+    │   Audit Engine  │  ← Complete audit trail
+    └─────────────────┘
 ```
 
 ## Features
