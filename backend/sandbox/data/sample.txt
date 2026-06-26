@@ -1,0 +1,15 @@
+Transaction Report - June 2026
+================================
+Total Transactions: 1,247
+Total Volume: $3,842,591.00
+Average Transaction: $3,081.00
+
+Top 5 Transactions:
+1. TX-2026-001  $892,000.00  Acme Corp
+2. TX-2026-042  $445,000.00  Globex Inc
+3. TX-2026-103  $210,000.00  Initech
+4. TX-2026-087  $189,500.00  Hooli
+5. TX-2026-156  $156,200.00  Cyberdyne
+
+Fraud Alerts: 3
+Pending Reviews: 12

@@ -1,0 +1,20 @@
+Research Notes - AgentGuard Security Analysis
+=============================================
+
+Date: 2026-06-26
+Researcher: Research Agent
+
+Summary:
+Current agent risk assessment framework operates primarily on
+rule-based heuristics with ML-based anomaly detection overlay.
+
+Key Findings:
+1. Risk scoring uses linear accumulation with diminishing returns
+2. Behavioral profiling captures frequency and diversity metrics
+3. Anomaly detection uses Isolation Forest (contamination=0.05)
+4. No LLM-based analysis is currently integrated
+
+Recommendations:
+- Consider adding time-series analysis for risk score trends
+- Implement periodic re-training of anomaly model
+- Add integration points for external threat intelligence feeds
