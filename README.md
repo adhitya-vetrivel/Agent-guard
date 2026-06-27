@@ -7,13 +7,13 @@ AgentGuard is a runtime security platform that sits between AI agents and the to
 ## Architecture
 
 ```
-User / Agent
-    │
-    ▼
-┌─────────────────┐
-│ Runtime Gateway  │  ← Request interception
-└──────┬──────────┘
-       │
+           User / Agent
+               │
+               ▼
+      ┌─────────────────┐
+      │ Runtime Gateway │  ← Request interception
+      └──────┬──────────┘
+             │
        ├──────────────┐
        ▼              ▼
 ┌────────────┐ ┌────────────┐
@@ -23,21 +23,21 @@ User / Agent
        │              │
        └──────┬───────┘
               ▼
-┌─────────────────┐
-│  Behavior Engine │  ← Anomaly detection (Isolation Forest)
-└──────┬──────────┘
-       ▼
-┌─────────────────┐
-│    Risk Engine   │  ← Risk scoring 0-100
-└──────┬──────────┘
-       ▼
-┌─────────────────┐
-│Execution Engine  │  ← Tool execution + HoneyTools
-└──────┬──────────┘
-       ▼
-┌─────────────────┐
-│   Audit Engine   │  ← Complete audit trail
-└─────────────────┘
+     ┌─────────────────┐
+     │  Behavior Engine│  ← Anomaly detection (Isolation Forest)
+     └──────┬──────────┘
+            ▼
+     ┌─────────────────┐
+     │    Risk Engine  │  ← Risk scoring 0-100
+     └──────┬──────────┘
+            ▼
+     ┌─────────────────┐
+     │Execution Engine │  ← Tool execution + HoneyTools
+     └──────┬──────────┘
+            ▼
+    ┌─────────────────┐
+    │   Audit Engine  │  ← Complete audit trail
+    └─────────────────┘
 ```
 
 ## Features
@@ -237,11 +237,11 @@ cd frontend && npm test
 | | |
 |---|---|---|
 | ![Login](frontend/public/screenshots/login.png) | ![Dashboard](frontend/public/screenshots/dashboard.png) |
-| ![Agents](frontend/public/screenshots/agents.png) | ![Audit Logs](frontend/public/screenshots/audit.png) |
-| ![Policies](frontend/public/screenshots/policies.png) | ![Risk Events](frontend/public/screenshots/risk-events.png) |
-| ![Threat Graph](frontend/public/screenshots/threat-graph.png) | ![Anomaly Dashboard](frontend/public/screenshots/anomaly.png) |
-| ![Live Log Viewer](frontend/public/screenshots/live.png) | ![Settings](frontend/public/screenshots/settings.png) |
-| ![System Health](frontend/public/screenshots/system-health.png) | |
+| ![Agents](frontend/public/screenshots/agents.png) | ![Agent Detail](frontend/public/screenshots/agent-detail.png) |
+| ![Policies](frontend/public/screenshots/policies.png) | ![Audit Logs](frontend/public/screenshots/audit.png) |
+| ![Risk Events](frontend/public/screenshots/risk-events.png) | ![Threat Graph](frontend/public/screenshots/threat-graph.png) |
+| ![Anomaly Dashboard](frontend/public/screenshots/anomaly.png) | ![Live Log Viewer](frontend/public/screenshots/live.png) |
+| ![Settings](frontend/public/screenshots/settings.png) | ![System Health](frontend/public/screenshots/system-health.png) |
 
 ## Future Scope
 
