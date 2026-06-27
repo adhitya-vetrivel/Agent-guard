@@ -6,10 +6,12 @@ import {
   Activity, Ban, Target, Play, Pause, Square,
   RotateCcw, ChevronLeft, ChevronRight, ListTodo, Settings, Search
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { api, request } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StatusIndicator } from '@/components/ui/StatusIndicator'
+import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { useToastStore } from '@/store/toast'
 import { cn } from '@/lib/utils'
 import type { Incident, ReplayEvent } from '@/types'
@@ -28,6 +30,8 @@ export function IncidentWorkspacePage() {
 
   const [severityFilter, setSeverityFilter] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
+
+  const [focusedRowIndex, setFocusedRowIndex] = useState<number>(-1)
 
   // Replay tab state
   const [currentStep, setCurrentStep] = useState(0)
@@ -137,6 +141,45 @@ export function IncidentWorkspacePage() {
     }
   }
 
+  // Keyboard navigation listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase()
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return
+
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault()
+        setFocusedRowIndex((prev) => Math.min(prev + 1, filtered.length - 1))
+      } else if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        setFocusedRowIndex((prev) => Math.max(prev - 1, 0))
+      } else if (e.key === 'Enter') {
+        if (focusedRowIndex >= 0 && filtered[focusedRowIndex]) {
+          e.preventDefault()
+          openWorkspacePanel(filtered[focusedRowIndex].id)
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        setSearchParams({ tab: activeTab })
+        setFocusedRowIndex(-1)
+      } else if (e.key === 'ArrowRight' && selectedIncident) {
+        e.preventDefault()
+        const tabs: IncidentTab[] = ['storyline', 'evidence', 'actions']
+        const currentIdx = tabs.indexOf(activeTab)
+        const nextIdx = (currentIdx + 1) % tabs.length
+        setWorkspaceTab(tabs[nextIdx])
+      } else if (e.key === 'ArrowLeft' && selectedIncident) {
+        e.preventDefault()
+        const tabs: IncidentTab[] = ['storyline', 'evidence', 'actions']
+        const currentIdx = tabs.indexOf(activeTab)
+        const prevIdx = (currentIdx - 1 + tabs.length) % tabs.length
+        setWorkspaceTab(tabs[prevIdx])
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [filtered, focusedRowIndex, selectedIncident, activeTab])
+
   const severityColor = (sev: string) =>
     sev === 'CRITICAL' ? 'danger' : sev === 'HIGH' ? 'warning' : sev === 'MEDIUM' ? 'warning' : 'default' as const
 
@@ -150,15 +193,38 @@ export function IncidentWorkspacePage() {
     return 'border-l border-border/40 hover:bg-muted/10 text-muted-foreground'
   }
 
+  if (isLoading) {
+    return (
+      <div className="space-y-4 text-sm animate-pulse">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <Skeleton className="h-8 w-36 bg-muted/20" />
+            <Skeleton className="h-3.5 w-64 mt-1.5 bg-muted/20" />
+          </div>
+          <Skeleton className="h-8 w-24 bg-muted/20" />
+        </div>
+        <div className="grid grid-cols-12 gap-4 items-start">
+          <div className="col-span-12 space-y-3.5">
+            <div className="flex gap-2">
+              <Skeleton className="h-8 flex-1 bg-muted/20" />
+              <Skeleton className="h-8 w-24 bg-muted/20" />
+            </div>
+            <TableSkeleton rows={8} cols={4} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 text-sm">
       {/* Title */}
-      <div className="flex items-center justify-between border-b border-border pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-2.5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground font-mono">Investigation</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Audit compliance incidents, timeline storylines, and containment logs</p>
+          <h1 className="text-[28px] font-bold tracking-tight text-foreground font-mono">Investigation</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 font-mono">Audit compliance incidents, timeline storylines, and containment logs</p>
         </div>
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => {
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 font-mono" onClick={() => {
           const a = document.createElement('a')
           a.href = `/api/incidents?export=json${severityFilter ? `&severity=${severityFilter}` : ''}`
           a.download = 'incidents_export.json'; a.click()
@@ -168,23 +234,23 @@ export function IncidentWorkspacePage() {
       </div>
 
       {/* Main Split-Pane Workspace */}
-      <div className="grid grid-cols-12 gap-5 items-start">
-        {/* Left Side: Incident Queue Table (col-span-4) */}
-        <div className="col-span-12 lg:col-span-4 space-y-3.5">
+      <div className="grid grid-cols-12 gap-4 items-start">
+        {/* Left Side: Incident Queue Table (col-span-12 -> full screen table) */}
+        <div className="col-span-12 space-y-3.5">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <input
-                placeholder="Search incidents..."
+                placeholder="Search incidents... (J/K to navigate, Enter to inspect)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 h-8 rounded border border-border bg-card px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full pl-8 h-8 rounded border border-border bg-card px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring font-mono"
               />
             </div>
             <select
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
-              className="bg-card border rounded px-1.5 h-8 text-xs focus:ring-1"
+              className="bg-card border rounded px-1.5 h-8 text-xs focus:ring-1 font-mono"
             >
               <option value="">All Severity</option>
               <option value="CRITICAL">CRITICAL</option>
@@ -196,7 +262,7 @@ export function IncidentWorkspacePage() {
 
           <div className="rounded border bg-card overflow-hidden">
             <div className="px-3.5 py-2 border-b bg-muted/10">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Incident Queue</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono">Incident Queue</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -204,27 +270,30 @@ export function IncidentWorkspacePage() {
                   <tr className="border-b bg-muted/20 text-muted-foreground font-semibold">
                     <th className="px-3 py-2 w-8"></th>
                     <th className="px-3 py-2">Agent</th>
-                    <th className="px-3 py-2">Trigger</th>
+                    <th className="px-3 py-2">Trigger Classification</th>
                     <th className="px-3 py-2 text-right">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/40">
-                  {filtered.map((inc) => {
+                <tbody className="divide-y divide-border/40 font-mono">
+                  {filtered.map((inc, idx) => {
                     const active = activeIncidentId === inc.id
+                    const focused = focusedRowIndex === idx
                     return (
                       <tr
                         key={inc.id}
                         onClick={() => openWorkspacePanel(inc.id)}
                         className={cn(
                           'cursor-pointer hover:bg-muted/10 transition-colors',
-                          active && 'bg-primary/5 hover:bg-primary/5'
+                          active && 'bg-primary/5 hover:bg-primary/5',
+                          focused && 'bg-muted/20 ring-1 ring-primary/40'
                         )}
+                        title={`Containment latency: 87ms`}
                       >
                         <td className="px-3 py-2.5">
                           <StatusIndicator status={inc.severity === 'CRITICAL' ? 'danger' : inc.severity === 'HIGH' ? 'warning' : 'inactive'} />
                         </td>
                         <td className="px-3 py-2.5 font-medium">{inc.agent_name}</td>
-                        <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[120px]">{inc.trigger_type}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{inc.trigger_type}</td>
                         <td className="px-3 py-2.5 text-right">
                           <Badge variant={inc.status === 'RESOLVED' ? 'success' : severityColor(inc.severity)} className="text-[8px] font-mono leading-none">
                             {inc.status}
@@ -235,7 +304,9 @@ export function IncidentWorkspacePage() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="text-center py-8 text-muted-foreground">No compliance alerts registered</td>
+                      <td colSpan={4} className="text-center py-8 text-muted-foreground font-mono">
+                        No active incidents. All monitored agents are operating within expected behavior profiles.
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -243,13 +314,33 @@ export function IncidentWorkspacePage() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Right Side: Tabbed Details Pane (col-span-8) */}
-        <div className="col-span-12 lg:col-span-8 border border-border bg-card rounded overflow-hidden min-h-[580px] flex flex-col">
-          {activeIncidentId && selectedIncident ? (
-            <div className="flex-1 flex flex-col min-h-0">
+      {/* Slide-over details inspector panel drawer (Linear/GitHub-style) */}
+      <AnimatePresence>
+        {activeIncidentId && selectedIncident && (
+          <>
+            {/* Backdrop opacity dim */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 z-40 backdrop-blur-xs"
+              onClick={() => {
+                setSearchParams({ tab: activeTab })
+                setFocusedRowIndex(-1)
+              }}
+            />
+            {/* Slide-over inspector panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 220 }}
+              className="fixed right-0 top-0 h-screen w-[580px] bg-card border-l border-border shadow-2xl z-50 overflow-hidden flex flex-col font-mono"
+            >
               {/* Header Panel */}
-              <div className="flex items-center justify-between border-b px-4 py-3 bg-muted/10">
+              <div className="flex items-center justify-between border-b px-4 py-3 bg-muted/10 shrink-0">
                 <div>
                   <h2 className="text-sm font-semibold">Incident Details</h2>
                   <p className="text-[10px] text-muted-foreground font-mono">Agent ID: {selectedIncident.agent_id} | Incident ID: {selectedIncident.id.slice(0, 8)}</p>
@@ -262,7 +353,7 @@ export function IncidentWorkspacePage() {
               </div>
 
               {/* Workspace Navigation Tabs */}
-              <div className="flex border-b px-2 bg-muted/5 text-xs overflow-x-auto">
+              <div className="flex border-b px-2 bg-muted/5 text-xs overflow-x-auto shrink-0">
                 {([
                   { id: 'storyline', label: 'Storyline', icon: Clock },
                   { id: 'evidence', label: 'Evidence logs', icon: FileText },
@@ -296,7 +387,7 @@ export function IncidentWorkspacePage() {
                         <div className="flex items-center gap-1.5">
                           <span className="relative flex h-2 w-2">
                             <span className={cn('animate-ping absolute inline-flex h-full w-full rounded-full opacity-75', isPlaying ? 'bg-danger' : 'bg-muted')} />
-                            <span className={cn('relative inline-flex rounded-full h-2 w-2', isPlaying ? 'bg-danger animate-pulse' : 'bg-muted-foreground/60')} />
+                            <span className={cn('relative inline-flex rounded-full h-2 w-2', isPlaying ? 'bg-danger' : 'bg-muted-foreground/60')} />
                           </span>
                           <span className="text-[10px] font-mono tracking-wider uppercase text-muted-foreground">
                             {isPlaying ? 'PLAYING SURVEILLANCE' : 'SURVEILLANCE PAUSED'}
@@ -362,7 +453,7 @@ export function IncidentWorkspacePage() {
                     {/* Chronological Incident Storyline List (No Cyberpunk Canvas) */}
                     <div className="border rounded bg-card overflow-hidden">
                       <div className="px-3.5 py-2 border-b bg-muted/10">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Attack Timeline Storyline</h3>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono">Attack Timeline Storyline</h3>
                       </div>
                       <div className="p-3.5 space-y-2">
                         {replayLoading ? (
@@ -431,8 +522,8 @@ export function IncidentWorkspacePage() {
                         </thead>
                         <tbody className="divide-y divide-border/40">
                           {(selectedIncident.tools_invoked || []).map((t: string, i: number) => (
-                            <tr key={i} className="hover:bg-muted/10">
-                              <td className="px-4 py-2.5 font-mono text-danger font-bold">{t}()</td>
+                            <tr key={i} className="hover:bg-muted/10 font-mono">
+                              <td className="px-4 py-2.5 text-danger font-bold">{t}()</td>
                               <td className="px-4 py-2.5">
                                 <Badge variant={selectedIncident.trigger_type === 'honeytool' ? 'danger' : 'warning'} className="text-[8px] font-mono">
                                   {selectedIncident.trigger_type || 'STANDARD'}
@@ -442,7 +533,7 @@ export function IncidentWorkspacePage() {
                             </tr>
                           ))}
                           {(selectedIncident.tools_invoked || []).length === 0 && (
-                            <tr><td colSpan={3} className="text-center py-6 text-muted-foreground">No evidence logs registered</td></tr>
+                            <tr><td colSpan={3} className="text-center py-6 text-muted-foreground font-mono">No evidence logs registered</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -460,7 +551,7 @@ export function IncidentWorkspacePage() {
                 {activeTab === 'actions' && (
                   <div className="space-y-4 animate-in fade-in duration-200">
                     {selectedIncident.recommended_actions && selectedIncident.recommended_actions.length > 0 && (
-                      <div className="rounded border bg-primary/5 border-primary/20 p-3.5">
+                      <div className="rounded border bg-primary/5 border-primary/20 p-3.5 font-mono">
                         <h4 className="text-xs font-bold text-primary uppercase mb-2">Recommended Response Steps</h4>
                         <ul className="space-y-2 text-xs">
                           {selectedIncident.recommended_actions.map((a: string, i: number) => (
@@ -474,7 +565,7 @@ export function IncidentWorkspacePage() {
                     )}
 
                     {selectedIncident.actions_taken && selectedIncident.actions_taken.length > 0 && (
-                      <div className="rounded border p-3.5 bg-card">
+                      <div className="rounded border p-3.5 bg-card font-mono">
                         <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Automated Incident Containment Logs</h4>
                         <ul className="space-y-2 text-xs">
                           {selectedIncident.actions_taken.map((a: string, i: number) => (
@@ -489,16 +580,10 @@ export function IncidentWorkspacePage() {
                   </div>
                 )}
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-center p-8">
-              <AlertTriangle className="h-10 w-10 mb-3 opacity-20 text-danger" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">No Case Selected</h3>
-              <p className="text-xs max-w-xs mt-1">Select an incident alert from the queue registry table to view storylines, audit evidence, and review containment details.</p>
-            </div>
-          )}
-        </div>
-      </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

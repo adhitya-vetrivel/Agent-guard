@@ -4,31 +4,31 @@
 
 @layer base {
   :root {
-    --background: 221 45% 8%;          /* #0B1220 */
+    --background: 222 47% 5%;           /* #050811 - Deeper background */
     --foreground: 210 17% 92%;
-    --card: 222 47% 11%;               /* #111827 */
+    --card: 222 47% 8%;                 /* #080c18 - Less contrast card */
     --card-foreground: 210 17% 92%;
-    --popover: 222 47% 11%;
+    --popover: 222 47% 8%;
     --popover-foreground: 210 17% 92%;
-    --primary: 221 83% 53%;            /* #2563EB */
+    --primary: 221 63% 50%;             /* Muted Blue (-20% saturation) */
     --primary-foreground: 0 0% 100%;
-    --secondary: 215 28% 17%;          /* #1F2937 */
+    --secondary: 215 28% 12%;           /* #121824 - Muted secondary */
     --secondary-foreground: 210 17% 88%;
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 10% 55%;
-    --accent: 215 28% 17%;
+    --muted: 215 28% 12%;
+    --muted-foreground: 215 10% 48%;
+    --accent: 215 28% 12%;
     --accent-foreground: 210 17% 92%;
-    --destructive: 0 84% 60%;          /* #EF4444 */
+    --destructive: 0 64% 55%;           /* Muted Red (-20% saturation) */
     --destructive-foreground: 0 0% 100%;
-    --border: 215 28% 17%;             /* #1F2937 */
-    --input: 215 28% 17%;
-    --ring: 221 83% 53%;
+    --border: 215 25% 12%;              /* Muted separator border */
+    --input: 215 25% 12%;
+    --ring: 221 63% 50%;
     --radius: 0.25rem;
-    --success: 162 76% 41%;            /* #10B981 */
+    --success: 162 56% 38%;             /* Muted Green (-20% saturation) */
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;             /* #F59E0B */
+    --warning: 38 72% 45%;              /* Muted Amber (-20% saturation) */
     --warning-foreground: 0 0% 100%;
-    --danger: 0 84% 60%;
+    --danger: 0 64% 55%;
     --danger-foreground: 0 0% 100%;
   }
 }

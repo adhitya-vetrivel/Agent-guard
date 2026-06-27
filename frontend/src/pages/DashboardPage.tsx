@@ -9,6 +9,7 @@ import { api, request } from '@/services/api'
 import { subscribe } from '@/hooks/useWebSocket'
 import { StatusIndicator } from '@/components/ui/StatusIndicator'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
 import type { DashboardData, Incident, Agent } from '@/types'
 
@@ -117,18 +118,37 @@ export function DashboardPage() {
 
   if (dashLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-background text-foreground">
-        <Activity className="h-5 w-5 animate-spin text-muted-foreground/60" />
+      <div className="space-y-4 text-sm">
+        <div className="border-b border-border pb-3">
+          <Skeleton className="h-7 w-48 bg-muted/20" />
+          <Skeleton className="h-3 w-64 mt-1 bg-muted/20" />
+        </div>
+        <div className="grid grid-cols-4 border border-border bg-card divide-x divide-border rounded">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="p-3 text-center space-y-1.5">
+              <Skeleton className="h-3 w-16 mx-auto bg-muted/20" />
+              <Skeleton className="h-5 w-8 mx-auto bg-muted/20" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-4 lg:grid-cols-12 items-start">
+          <div className="lg:col-span-8 space-y-4">
+            <TableSkeleton rows={6} cols={4} />
+          </div>
+          <div className="lg:col-span-4">
+            <TableSkeleton rows={6} cols={2} />
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-5 text-sm">
+    <div className="space-y-4 text-sm">
       {/* Title Header */}
-      <div className="border-b border-border pb-3">
-        <h1 className="text-xl font-bold tracking-tight text-foreground font-mono">Command Center</h1>
-        <p className="text-[11px] text-muted-foreground">Runtime AI agent threat monitoring and inline firewall actions</p>
+      <div className="border-b border-border pb-2.5">
+        <h1 className="text-[28px] font-bold tracking-tight text-foreground font-mono">Command Center</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">Runtime AI agent threat monitoring and inline firewall actions</p>
       </div>
 
       {/* Flat metrics row (No big widgets or gradients) */}
@@ -152,36 +172,36 @@ export function DashboardPage() {
       </div>
 
       {/* Main Split-Pane Layout */}
-      <div className="grid gap-5 lg:grid-cols-12 items-start">
+      <div className="grid gap-4 lg:grid-cols-12 items-start">
         {/* Left Side: Fleet & Live Logs */}
-        <div className="lg:col-span-8 space-y-5">
+        <div className="lg:col-span-8 space-y-4">
           {/* Active Fleet Table */}
           <div className="rounded border bg-card overflow-hidden">
-            <div className="px-3.5 py-2 border-b bg-muted/10">
+            <div className="px-3 py-2 border-b bg-muted/10">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Agent Fleet</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
                   <tr className="border-b bg-muted/20 text-muted-foreground font-semibold">
-                    <th className="px-4 py-2">Agent Name</th>
-                    <th className="px-4 py-2">Role</th>
-                    <th className="px-4 py-2 text-right">Risk Score</th>
-                    <th className="px-4 py-2 text-right">Containment Status</th>
+                    <th className="px-3 py-2">Agent Name</th>
+                    <th className="px-3 py-2">Role</th>
+                    <th className="px-3 py-2 text-right">Risk Score</th>
+                    <th className="px-3 py-2 text-right">Containment Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {activeFleet.map((agent) => (
-                    <tr key={agent.id} className="hover:bg-muted/10 cursor-pointer" onClick={() => navigate(`/fleet?id=${agent.id}`)}>
-                      <td className="px-4 py-2.5 font-medium flex items-center gap-2">
+                    <tr key={agent.id} className="hover:bg-muted/10 cursor-pointer transition-colors" onClick={() => navigate(`/fleet?id=${agent.id}`)} title={`Capabilities: ${agent.capabilities?.join(', ') || 'none'}`}>
+                      <td className="px-3 py-2 font-medium flex items-center gap-2">
                         <StatusIndicator status={agent.status === 'ACTIVE' ? 'active' : agent.status === 'BLOCKED' ? 'danger' : 'warning'} />
                         {agent.name}
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{agent.role}</td>
-                      <td className={cn("px-4 py-2.5 text-right font-mono font-bold", agent.risk_score > 70 ? 'text-danger' : agent.risk_score > 40 ? 'text-warning' : 'text-success')}>
+                      <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{agent.role}</td>
+                      <td className={cn("px-3 py-2 text-right font-mono font-bold", agent.risk_score > 70 ? 'text-danger' : agent.risk_score > 40 ? 'text-warning' : 'text-success')}>
                         {agent.risk_score.toFixed(0)}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-3 py-2 text-right">
                         <Badge variant={agent.status === 'ACTIVE' ? 'success' : 'danger'} className="text-[9px] tracking-wide font-mono uppercase">
                           {agent.status}
                         </Badge>

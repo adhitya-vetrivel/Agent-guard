@@ -8,6 +8,7 @@ import { api } from '@/services/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { StatusIndicator } from '@/components/ui/StatusIndicator'
+import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { useToastStore } from '@/store/toast'
 import { subscribe } from '@/hooks/useWebSocket'
 import { cn } from '@/lib/utils'
@@ -105,7 +106,7 @@ export function DeceptionCenterPage() {
         if (type === 'honeytool_trigger' || data.is_honeytool || (data.decision === 'QUARANTINED' && data.tool_name?.includes('secrets'))) {
           setActiveOverlay({
             agent: data.agent_name || 'ResearchAgent',
-            trap: data.tool_name ? `${data.tool_name}()` : 'download_customer_database()',
+            trap: data.tool_name ? `${data.tool_name}` : 'download_customer_database',
             containment: data.latency_ms ? `${data.latency_ms}ms` : '87ms',
             incident: data.incident_id || 'INC-2026-104',
             decision: 'QUARANTINED'
@@ -139,8 +140,29 @@ export function DeceptionCenterPage() {
 
   if (honeyLoading && triggerLoading && stateLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-background text-foreground">
-        <Activity className="h-5 w-5 animate-spin text-muted-foreground/60" />
+      <div className="space-y-4 text-sm animate-pulse">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <Skeleton className="h-8 w-40 bg-muted/20" />
+            <Skeleton className="h-3.5 w-64 mt-1.5 bg-muted/20" />
+          </div>
+          <Skeleton className="h-8 w-24 bg-muted/20" />
+        </div>
+        <div className="grid grid-cols-12 gap-4 items-start">
+          <div className="col-span-12 lg:col-span-6">
+            <TableSkeleton rows={6} cols={5} />
+          </div>
+          <div className="col-span-12 lg:col-span-6 space-y-4">
+            <div className="rounded border bg-card p-4 space-y-3">
+              <Skeleton className="h-3 w-16 bg-muted/20" />
+              <div className="grid grid-cols-3 gap-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 bg-muted/20" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -148,18 +170,18 @@ export function DeceptionCenterPage() {
   return (
     <div className="space-y-4 text-sm">
       {/* Title */}
-      <div className="flex items-center justify-between border-b border-border pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-2.5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground font-mono">Deception Center</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Configure system-wide decoys and monitor bait engagements</p>
+          <h1 className="text-[28px] font-bold tracking-tight text-foreground font-mono">Deception Center</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 font-mono">Configure system-wide decoys and monitor bait engagements</p>
         </div>
-        <Button onClick={simulateHoneyToolHit} className="bg-primary hover:bg-primary/90 text-white text-xs h-8 gap-1.5 shadow-sm">
+        <Button onClick={simulateHoneyToolHit} className="bg-primary hover:bg-primary/90 text-white text-xs h-8 gap-1.5 shadow-sm font-mono">
           <Zap className="h-3.5 w-3.5 text-warning fill-warning" /> Simulate Trap Hit
         </Button>
       </div>
 
-      {/* Main Split-Pane Workspace Grid */}
-      <div className="grid grid-cols-12 gap-5 items-start">
+      {/* Main Split-Pane Layout Grid */}
+      <div className="grid grid-cols-12 gap-4 items-start">
         
         {/* Left Side: Trap Inventory Table (1/2 width -> col-span-6) */}
         <div className="col-span-12 lg:col-span-6 border border-border bg-card rounded overflow-hidden">
@@ -177,18 +199,22 @@ export function DeceptionCenterPage() {
                   <th className="px-4 py-2 text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
+              <tbody className="divide-y divide-border/40 font-mono">
                 {honeytools.map((ht) => {
                   const configState = stateData?.[ht.name]
                   const isEnabled = configState?.enabled ?? ht.is_active
+                  const lastTrigger = triggers.find((t: any) => t.tool_name === ht.name || t.tool_name === `${ht.name}()`)
+                  const lastTriggerText = lastTrigger 
+                    ? `Last triggered by ${lastTrigger.agent_name || 'Agent'} at ${new Date(lastTrigger.timestamp).toLocaleTimeString()}`
+                    : 'Last triggered: Never'
                   return (
-                    <tr key={ht.id} className={cn('hover:bg-muted/10 transition-colors', !isEnabled && 'opacity-50')}>
-                      <td className="px-4 py-2.5 font-mono text-purple-400 font-semibold">{ht.name}()</td>
+                    <tr key={ht.id} className={cn('hover:bg-muted/10 transition-colors', !isEnabled && 'opacity-50')} title={lastTriggerText}>
+                      <td className="px-4 py-2.5 text-purple-400 font-semibold">{ht.name}()</td>
                       <td className="px-4 py-2.5">
-                        <Badge variant="outline" className="font-mono text-[8px]">{ht.decoy_type}</Badge>
+                        <Badge variant="outline" className="text-[8px]">{ht.decoy_type}</Badge>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold">{triggerCounts[ht.name] || 0}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-success">87ms</td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{triggerCounts[ht.name] || 0}</td>
+                      <td className="px-4 py-2.5 text-right text-success">87ms</td>
                       <td className="px-4 py-2.5 text-right">
                         <button
                           onClick={() => toggleMutation.mutate(ht.name)}

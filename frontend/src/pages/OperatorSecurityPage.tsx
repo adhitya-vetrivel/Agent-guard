@@ -11,6 +11,7 @@ import { api } from '@/services/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { Skeleton, TableSkeleton } from '@/components/ui/Skeleton'
 import { useAuthStore } from '@/store/auth'
 import { cn } from '@/lib/utils'
 import type { OperatorActivity, OperatorRisk } from '@/types'
@@ -162,8 +163,22 @@ export function OperatorSecurityPage() {
 
   if (actLoading && riskLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-background text-foreground">
-        <Activity className="h-5 w-5 animate-spin text-muted-foreground/60" />
+      <div className="space-y-4 text-sm animate-pulse">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <Skeleton className="h-8 w-40 bg-muted/20" />
+            <Skeleton className="h-3.5 w-64 mt-1.5 bg-muted/20" />
+          </div>
+          <Skeleton className="h-8 w-24 bg-muted/20" />
+        </div>
+        <div className="grid grid-cols-12 gap-4 items-start">
+          <div className="col-span-12 lg:col-span-6">
+            <TableSkeleton rows={6} cols={4} />
+          </div>
+          <div className="col-span-12 lg:col-span-6">
+            <Skeleton className="h-[300px] w-full bg-muted/20" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -171,10 +186,10 @@ export function OperatorSecurityPage() {
   return (
     <div className="space-y-4 text-sm">
       {/* Page Header */}
-      <div className="flex items-center justify-between border-b border-border pb-3">
+      <div className="flex items-center justify-between border-b border-border pb-2.5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground font-mono">Operator Security</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Auditing administrative operations, policy changes, and gateway actions</p>
+          <h1 className="text-[28px] font-bold tracking-tight text-foreground font-mono">Operator Security</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 font-mono">Auditing administrative operations, policy changes, and gateway actions</p>
         </div>
         {isAdmin && (
           <Button variant="outline" size="sm" className="gap-2 h-8 text-xs" onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending}>
