@@ -47,7 +47,13 @@ class AuditService:
         agent_id: Optional[str] = None,
         search: Optional[str] = None,
     ) -> list[AuditLog]:
-        query = select(AuditLog)
+        from app.services.demo_service import is_demo_mode_active
+        from app.models.agent import Agent
+        is_demo = await is_demo_mode_active(self.session)
+        
+        query = select(AuditLog).join(Agent, AuditLog.agent_id == Agent.id, isouter=True).where(
+            or_(Agent.is_demo == is_demo, AuditLog.agent_id == None)
+        )
         if action:
             query = query.where(AuditLog.action == action)
         if agent_id:
@@ -68,12 +74,16 @@ class AuditService:
     async def get_risk_over_time(self, hours: int = 24) -> list[dict]:
         from app.models.risk_event import RiskEvent
         from app.models.tool_call import ToolCall
+        from app.models.agent import Agent
+        from app.services.demo_service import is_demo_mode_active
+        is_demo = await is_demo_mode_active(self.session)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         # Try risk events first
         result = await self.session.execute(
             select(RiskEvent)
-            .where(RiskEvent.created_at >= cutoff)
+            .join(Agent, RiskEvent.agent_id == Agent.id)
+            .where(RiskEvent.created_at >= cutoff, Agent.is_demo == is_demo)
             .order_by(RiskEvent.created_at.asc())
         )
         events = result.scalars().all()
@@ -83,7 +93,8 @@ class AuditService:
         if not source_data:
             tc_result = await self.session.execute(
                 select(ToolCall.created_at, ToolCall.risk_score)
-                .where(ToolCall.created_at >= cutoff)
+                .join(Agent, ToolCall.agent_id == Agent.id)
+                .where(ToolCall.created_at >= cutoff, Agent.is_demo == is_demo)
                 .order_by(ToolCall.created_at.asc())
             )
             rows = tc_result.all()
@@ -104,10 +115,14 @@ class AuditService:
         return result_list
 
     async def get_tool_usage(self, hours: int = 24) -> list[dict]:
+        from app.models.agent import Agent
+        from app.services.demo_service import is_demo_mode_active
+        is_demo = await is_demo_mode_active(self.session)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         result = await self.session.execute(
             select(ToolCall.tool_name, func.count(ToolCall.id).label("count"))
-            .where(ToolCall.created_at >= cutoff)
+            .join(Agent, ToolCall.agent_id == Agent.id)
+            .where(ToolCall.created_at >= cutoff, Agent.is_demo == is_demo)
             .group_by(ToolCall.tool_name)
             .order_by(func.count(ToolCall.id).desc())
             .limit(20)
@@ -115,10 +130,14 @@ class AuditService:
         return [{"tool": row[0], "count": row[1]} for row in result.all()]
 
     async def get_agent_activity(self, hours: int = 24) -> list[dict]:
+        from app.models.agent import Agent
+        from app.services.demo_service import is_demo_mode_active
+        is_demo = await is_demo_mode_active(self.session)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         result = await self.session.execute(
             select(ToolCall.agent_name, func.count(ToolCall.id).label("count"))
-            .where(ToolCall.created_at >= cutoff)
+            .join(Agent, ToolCall.agent_id == Agent.id)
+            .where(ToolCall.created_at >= cutoff, Agent.is_demo == is_demo)
             .group_by(ToolCall.agent_name)
             .order_by(func.count(ToolCall.id).desc())
             .limit(20)

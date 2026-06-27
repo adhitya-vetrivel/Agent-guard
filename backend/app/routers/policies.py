@@ -5,18 +5,21 @@ from app.schemas.policy import PolicyCreate, PolicyUpdate, PolicyResponse
 from app.services.policy_service import PolicyService
 from app.services.audit_service import AuditService
 from app.models.audit_log import AuditAction
-from app.security.auth import get_admin_user
-from app.models.user import User
+from app.security.auth import get_current_user
+from app.security.rbac import require_any_role
+from app.models.user import User, UserRole
 import json
 
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
+
+_policy_role_check = Depends(require_any_role([UserRole.OPERATOR, UserRole.ENGINEER, UserRole.ADMIN]))
 
 
 @router.post("", response_model=PolicyResponse)
 async def create_policy(
     data: PolicyCreate,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _policy_role_check,
 ):
     service = PolicyService(session)
     policy = await service.create_policy(data)
@@ -26,6 +29,15 @@ async def create_policy(
         user_id=user.id,
         details=f"Policy '{policy.name}' created",
     )
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="policy_edit",
+        details=f"Policy '{policy.name}' created by {user.email}"
+    )
     return _policy_to_response(policy)
 
 
@@ -34,7 +46,7 @@ async def list_policies(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _policy_role_check,
 ):
     service = PolicyService(session)
     policies = await service.get_policies(skip, limit)
@@ -45,7 +57,7 @@ async def list_policies(
 async def get_policy(
     policy_id: str,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _policy_role_check,
 ):
     service = PolicyService(session)
     policy = await service.get_policy(policy_id)
@@ -59,7 +71,7 @@ async def update_policy(
     policy_id: str,
     data: PolicyUpdate,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _policy_role_check,
 ):
     service = PolicyService(session)
     policy = await service.update_policy(policy_id, data)
@@ -71,6 +83,15 @@ async def update_policy(
         user_id=user.id,
         details=f"Policy '{policy.name}' updated",
     )
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="policy_edit",
+        details=f"Policy '{policy.name}' updated by {user.email}"
+    )
     return _policy_to_response(policy)
 
 
@@ -78,7 +99,7 @@ async def update_policy(
 async def delete_policy(
     policy_id: str,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _policy_role_check,
 ):
     service = PolicyService(session)
     deleted = await service.delete_policy(policy_id)
@@ -89,6 +110,15 @@ async def delete_policy(
         action=AuditAction.POLICY_DELETE,
         user_id=user.id,
         details=f"Policy {policy_id} deleted",
+    )
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="policy_edit",
+        details=f"Policy '{policy_id}' deleted by {user.email}"
     )
     return {"message": "Policy deleted"}
 

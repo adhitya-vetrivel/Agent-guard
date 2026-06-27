@@ -9,6 +9,8 @@ class RateLimiter:
         self.requests: dict[str, list[float]] = defaultdict(list)
 
     async def check(self, request: Request):
+        if settings.DEMO_MODE:
+            return
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window = 60.0

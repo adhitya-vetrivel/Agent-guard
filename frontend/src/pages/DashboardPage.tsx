@@ -1,314 +1,277 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  Bot, ShieldCheck, ShieldOff, AlertTriangle, Activity,
-  Terminal, Gauge, Sparkles, Eye, Search, ArrowUpRight, Clock,
+  Shield, Bot, Activity, AlertTriangle,
+  Terminal, ShieldAlert, Swords, Eye
 } from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, AreaChart, Area, Cell, PieChart, Pie,
-} from 'recharts'
-import { api } from '@/services/api'
-import { useDashboardStore } from '@/store/dashboard'
-import { StatCard } from '@/components/layout/StatCard'
-import { SecurityGrade } from '@/components/SecurityGrade'
+import { api, request } from '@/services/api'
+import { subscribe } from '@/hooks/useWebSocket'
+import { StatusIndicator } from '@/components/ui/StatusIndicator'
 import { Badge } from '@/components/ui/badge'
-import type { DashboardData } from '@/types'
+import { cn } from '@/lib/utils'
+import type { DashboardData, Incident, Agent } from '@/types'
 
-const barColors = ['hsl(142, 100%, 50%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 51%)', 'hsl(200, 100%, 50%)', 'hsl(280, 100%, 50%)']
+interface LiveLogEntry {
+  id: string
+  timestamp: string
+  agent_name: string
+  tool_name: string
+  decision: string
+  risk_score: number
+  is_honeytool: boolean
+}
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { data, isLoading, error } = useQuery<DashboardData>({
+  const [liveLogs, setLiveLogs] = useState<LiveLogEntry[]>([])
+
+  // Dashboard Aggregated query
+  const { data: dashData, isLoading: dashLoading } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
     queryFn: () => api.getDashboard(),
-    staleTime: 3000,
+    refetchInterval: 5000,
   })
 
-  const lastEvent = useDashboardStore((s) => s.lastEvent)
-  const [flashCritical, setFlashCritical] = useState(false)
-  const [selectedMetric, setSelectedMetric] = useState<string>('all')
+  // Incidents query
+  const { data: incidents } = useQuery<Incident[]>({
+    queryKey: ['incidents'],
+    queryFn: () => request('/incidents'),
+    refetchInterval: 5000,
+  })
 
+  // HoneyTools triggers query
+  const { data: honeytoolTriggers } = useQuery({
+    queryKey: ['honeytool-triggers-dash'],
+    queryFn: () => api.getHoneyToolTriggers(),
+    refetchInterval: 5000,
+  })
+
+  // Operator risks query
+  const { data: operatorRisks } = useQuery({
+    queryKey: ['operator-risks-dash'],
+    queryFn: () => api.getOperatorRisks(),
+    refetchInterval: 10000,
+  })
+
+  // Agents list
+  const { data: agents } = useQuery<Agent[]>({
+    queryKey: ['agents'],
+    queryFn: () => api.getAgents(),
+    refetchInterval: 5000,
+  })
+
+  // Subscribe to central WebSocket feed
   useEffect(() => {
-    if (lastEvent?.type === 'containment') {
-      setFlashCritical(true)
-      setTimeout(() => setFlashCritical(false), 1500)
-    }
-  }, [lastEvent])
+    const unsubscribe = subscribe((msg) => {
+      try {
+        const data = msg.data || msg
+        const type = msg.type || data.type || ''
+        if (type === 'tool_execution' || data.tool_name) {
+          setLiveLogs((prev) => [
+            {
+              id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              timestamp: new Date().toLocaleTimeString(),
+              agent_name: data.agent_name || 'Agent',
+              tool_name: data.tool_name || 'execute',
+              decision: data.decision || 'ALLOWED',
+              risk_score: data.risk_score || 0,
+              is_honeytool: data.is_honeytool || false
+            },
+            ...prev
+          ].slice(0, 80))
+        }
+      } catch {}
+    })
+    return () => unsubscribe()
+  }, [])
 
-  const riskOverTime = useMemo(() => data?.risk_over_time ?? [], [data?.risk_over_time])
-  const toolUsage = useMemo(() => data?.tool_usage ?? [], [data?.tool_usage])
-  const agentActivity = useMemo(() => data?.agent_activity ?? [], [data?.agent_activity])
+  const activeIncidentsCount = useMemo(() => {
+    return (incidents || []).filter(i => i.status !== 'RESOLVED' && (i.severity === 'CRITICAL' || i.severity === 'HIGH')).length
+  }, [incidents])
 
-  const filteredToolUsage = useMemo(() => {
-    if (selectedMetric === 'all') return toolUsage
-    return toolUsage.filter(t => t.tool.toLowerCase().includes(selectedMetric))
-  }, [toolUsage, selectedMetric])
+  const containedAgentsCount = useMemo(() => {
+    if (!agents) return 0
+    return agents.filter(a => a.status === 'BLOCKED' || a.status === 'QUARANTINED').length
+  }, [agents])
 
-  const statusDistribution = useMemo(() => {
-    if (!data) return []
-    const s = data.stats
-    return [
-      { name: 'Active', value: s.active_agents, color: 'hsl(142, 70%, 45%)' },
-      { name: 'Blocked', value: s.blocked_agents, color: 'hsl(0, 72%, 51%)' },
-      { name: 'Quarantined', value: s.quarantined_agents, color: 'hsl(38, 92%, 50%)' },
-    ].filter(d => d.value > 0)
-  }, [data])
+  const honeytoolTriggersCount = useMemo(() => {
+    return honeytoolTriggers?.triggers?.length || 0
+  }, [honeytoolTriggers])
 
-  const latestCalls = useMemo(() => data?.recent_tool_calls.slice(0, 5) ?? [], [data?.recent_tool_calls])
+  const avgOperatorRisk = useMemo(() => {
+    if (!operatorRisks || operatorRisks.length === 0) return 0
+    return operatorRisks.reduce((sum: number, r: any) => sum + (r.score || r.risk_score || 0), 0) / operatorRisks.length
+  }, [operatorRisks])
 
-  if (isLoading) {
+  const criticalQueue = useMemo(() => {
+    return (incidents || [])
+      .filter((i) => i.status !== 'RESOLVED' && (i.severity === 'CRITICAL' || i.severity === 'HIGH'))
+      .sort((a, b) => b.severity.localeCompare(a.severity))
+      .slice(0, 8)
+  }, [incidents])
+
+  const activeFleet = useMemo(() => {
+    return (agents || []).slice(0, 10)
+  }, [agents])
+
+  if (dashLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="text-center">
-          <Activity className="mx-auto h-8 w-8 animate-spin text-primary" />
-          <p className="mt-2 text-sm text-muted-foreground">Loading dashboard...</p>
-        </div>
+      <div className="flex h-[80vh] items-center justify-center bg-background text-foreground">
+        <Activity className="h-5 w-5 animate-spin text-muted-foreground/60" />
       </div>
     )
   }
-
-  if (error) {
-    return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="text-center text-danger">
-          <AlertTriangle className="mx-auto h-8 w-8" />
-          <p className="mt-2 text-sm">Failed to load dashboard</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!data) return null
-
-  const { stats } = data
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Real-time security monitoring</p>
+    <div className="space-y-5 text-sm">
+      {/* Title Header */}
+      <div className="border-b border-border pb-3">
+        <h1 className="text-xl font-bold tracking-tight text-foreground font-mono">Command Center</h1>
+        <p className="text-[11px] text-muted-foreground">Runtime AI agent threat monitoring and inline firewall actions</p>
+      </div>
+
+      {/* Flat metrics row (No big widgets or gradients) */}
+      <div className="grid grid-cols-4 border border-border bg-card divide-x divide-border rounded">
+        <div className="p-3 text-center cursor-pointer hover:bg-muted/10 transition-colors" onClick={() => navigate('/investigation')}>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Active Alerts</p>
+          <p className="text-lg font-bold font-mono text-danger mt-0.5">{activeIncidentsCount}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex h-2 w-2 rounded-full bg-success" />
-          <span className="text-xs text-muted-foreground hidden sm:inline">All Systems Nominal</span>
+        <div className="p-3 text-center cursor-pointer hover:bg-muted/10 transition-colors" onClick={() => navigate('/fleet')}>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Contained Agents</p>
+          <p className="text-lg font-bold font-mono text-success mt-0.5">{containedAgentsCount}</p>
+        </div>
+        <div className="p-3 text-center cursor-pointer hover:bg-muted/10 transition-colors" onClick={() => navigate('/deception-center')}>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Baited Traps</p>
+          <p className="text-lg font-bold font-mono text-purple-400 mt-0.5">{honeytoolTriggersCount}</p>
+        </div>
+        <div className="p-3 text-center cursor-pointer hover:bg-muted/10 transition-colors" onClick={() => navigate('/operator-security')}>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Operator Risk</p>
+          <p className="text-lg font-bold font-mono text-warning mt-0.5">{avgOperatorRisk.toFixed(0)}</p>
         </div>
       </div>
 
-      {lastEvent?.type === 'containment' && (
-        <div className={`rounded-lg border border-danger/50 bg-danger/10 p-3 ${flashCritical ? 'flash-critical' : ''}`}>
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-danger shrink-0" />
-            <div className="min-w-0">
-              <p className="font-semibold text-danger">Containment Alert</p>
-              <p className="text-sm text-muted-foreground truncate">
-                Agent <strong>{(lastEvent.data as any)?.agent_name}</strong> contained &mdash; {(lastEvent.data as any)?.reason}
-              </p>
+      {/* Main Split-Pane Layout */}
+      <div className="grid gap-5 lg:grid-cols-12 items-start">
+        {/* Left Side: Fleet & Live Logs */}
+        <div className="lg:col-span-8 space-y-5">
+          {/* Active Fleet Table */}
+          <div className="rounded border bg-card overflow-hidden">
+            <div className="px-3.5 py-2 border-b bg-muted/10">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Agent Fleet</h3>
             </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div onClick={() => navigate('/agents')} className="cursor-pointer">
-          <StatCard title="Total Agents" value={stats.total_agents} icon={<Bot className="h-5 w-5" />} variant="default" />
-        </div>
-        <div onClick={() => navigate('/agents')} className="cursor-pointer">
-          <StatCard title="Active Agents" value={stats.active_agents} icon={<ShieldCheck className="h-5 w-5" />} variant="success" />
-        </div>
-        <div onClick={() => navigate('/risk-events')} className="cursor-pointer">
-          <StatCard title="Blocked / Quarantined" value={stats.blocked_agents + stats.quarantined_agents} icon={<ShieldOff className="h-5 w-5" />} variant="danger" />
-        </div>
-        <div onClick={() => navigate('/risk-events')} className="cursor-pointer">
-          <StatCard title="Threats Detected" value={stats.threats_detected} icon={<AlertTriangle className="h-5 w-5" />} variant="warning" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard title="Total Tool Calls" value={stats.total_tool_calls} icon={<Terminal className="h-5 w-5" />} />
-        <StatCard title="Avg Risk Score" value={`${stats.average_risk_score.toFixed(1)}%`} icon={<Gauge className="h-5 w-5" />} variant={stats.average_risk_score > 50 ? 'warning' : 'default'} />
-        <StatCard title="Risk Events Today" value={stats.risk_events_today} icon={<AlertTriangle className="h-5 w-5" />} variant={stats.risk_events_today > 0 ? 'warning' : 'default'} />
-        <SecurityGrade grade={stats.average_risk_score <= 20 ? 'A' : stats.average_risk_score <= 40 ? 'B' : stats.average_risk_score <= 60 ? 'C' : stats.average_risk_score <= 80 ? 'D' : 'F'} size="md" />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-lg border bg-card p-4">
-          <h3 className="mb-3 font-semibold flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Risk Score Over Time
-          </h3>
-          <div className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={riskOverTime}>
-                <defs>
-                  <linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(142, 100%, 50%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(142, 100%, 50%)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={11} tickMargin={8} />
-                <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={[0, 'auto']} tickMargin={8} />
-                <Tooltip />
-                <Area type="monotone" dataKey="avg_score" stroke="hsl(142, 100%, 50%)" fill="url(#riskGradient)" strokeWidth={2} />
-                <Area type="monotone" dataKey="max_score" stroke="hsl(38, 92%, 50%)" fill="none" strokeWidth={1} strokeDasharray="4 4" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="mb-3 font-semibold flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            Agent Status
-          </h3>
-          {statusDistribution.length > 0 ? (
-            <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={statusDistribution}
-                    cx="50%" cy="50%"
-                    innerRadius={60} outerRadius={90}
-                    paddingAngle={4}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {statusDistribution.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-              No agents registered
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-primary" />
-              Tool Usage
-            </h3>
-            <div className="flex gap-1">
-              {['all', 'search', 'file', 'read'].map(m => (
-                <button key={m} onClick={() => setSelectedMetric(m)}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                    selectedMetric === m ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
-                  }`}>
-                  {m === 'all' ? 'All' : m}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={filteredToolUsage} margin={{ bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="tool" stroke="var(--muted-foreground)" fontSize={10} angle={-25} textAnchor="end" tickMargin={8} />
-                <YAxis stroke="var(--muted-foreground)" fontSize={11} tickMargin={8} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {filteredToolUsage.map((_, i) => (
-                    <Cell key={i} fill={barColors[i % barColors.length]} />
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="border-b bg-muted/20 text-muted-foreground font-semibold">
+                    <th className="px-4 py-2">Agent Name</th>
+                    <th className="px-4 py-2">Role</th>
+                    <th className="px-4 py-2 text-right">Risk Score</th>
+                    <th className="px-4 py-2 text-right">Containment Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {activeFleet.map((agent) => (
+                    <tr key={agent.id} className="hover:bg-muted/10 cursor-pointer" onClick={() => navigate(`/fleet?id=${agent.id}`)}>
+                      <td className="px-4 py-2.5 font-medium flex items-center gap-2">
+                        <StatusIndicator status={agent.status === 'ACTIVE' ? 'active' : agent.status === 'BLOCKED' ? 'danger' : 'warning'} />
+                        {agent.name}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{agent.role}</td>
+                      <td className={cn("px-4 py-2.5 text-right font-mono font-bold", agent.risk_score > 70 ? 'text-danger' : agent.risk_score > 40 ? 'text-warning' : 'text-success')}>
+                        {agent.risk_score.toFixed(0)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <Badge variant={agent.status === 'ACTIVE' ? 'success' : 'danger'} className="text-[9px] tracking-wide font-mono uppercase">
+                          {agent.status}
+                        </Badge>
+                      </td>
+                    </tr>
                   ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="mb-3 font-semibold flex items-center gap-2">
-            <Activity className="h-4 w-4 text-warning" />
-            Agent Activity
-          </h3>
-          <div className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={agentActivity} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis type="number" stroke="var(--muted-foreground)" fontSize={11} tickMargin={8} />
-                <YAxis dataKey="agent" type="category" stroke="var(--muted-foreground)" fontSize={11} width={100} tickMargin={8} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {agentActivity.map((_, i) => (
-                    <Cell key={i} fill={barColors[i % barColors.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="mb-3 font-semibold flex items-center gap-2">
-            <Clock className="h-4 w-4 text-primary" />
-            Latest Tool Calls
-          </h3>
-          <div className="space-y-2">
-            {latestCalls.map((tc) => (
-              <div key={tc.id} className="flex items-center justify-between rounded-lg border bg-background/50 px-3 py-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant={tc.decision === 'ALLOWED' ? 'success' : tc.decision === 'DENIED' ? 'warning' : 'danger'} className="text-[10px] shrink-0">
-                    {tc.decision}
-                  </Badge>
-                  <span className="text-sm font-medium truncate">{tc.agent_name}</span>
-                  <span className="text-xs font-mono text-muted-foreground hidden sm:inline truncate">{tc.tool_name}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-xs font-mono ${tc.risk_score > 80 ? 'text-danger' : tc.risk_score > 50 ? 'text-warning' : 'text-muted-foreground'}`}>
-                    {tc.risk_score.toFixed(0)}
-                  </span>
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    {new Date(tc.created_at).toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {latestCalls.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No tool calls yet</p>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="mb-3 font-semibold flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            Live Event Feed
-          </h3>
-          <div className="max-h-[300px] space-y-2 overflow-y-auto">
-            {data.recent_events.slice(0, 20).map((event) => (
-              <div key={event.id} className="flex items-center justify-between rounded-lg border bg-background/50 px-3 py-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant={event.decision === 'ALLOWED' ? 'success' : event.decision === 'DENIED' ? 'warning' : event.decision === 'BLOCKED' ? 'danger' : 'default'} className="text-[10px] shrink-0">
-                    {event.action}
-                  </Badge>
-                  <span className="text-sm text-foreground truncate">{event.agent_name || 'System'}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {event.tool_name && (
-                    <span className="text-xs text-muted-foreground font-mono hidden sm:inline">{event.tool_name}</span>
+                  {activeFleet.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-6 text-muted-foreground">No agents active in registry</td>
+                    </tr>
                   )}
-                  {event.risk_score !== null && (
-                    <span className={`text-xs font-mono ${event.risk_score > 80 ? 'text-danger' : event.risk_score > 50 ? 'text-warning' : 'text-muted-foreground'}`}>
-                      {event.risk_score.toFixed(0)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Live Operations Feed */}
+          <div className="rounded border bg-card overflow-hidden">
+            <div className="px-3.5 py-2 border-b bg-muted/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="h-3.5 w-3.5 text-primary" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Live Operations Feed</h3>
+              </div>
+              <Badge variant="outline" className="text-[8px] font-mono tracking-wider">WS TELEMETRY CONNECTED</Badge>
+            </div>
+            <div className="bg-black/40 p-4 h-[240px] overflow-y-auto font-mono text-[11px] space-y-1.5 scrollbar-thin">
+              {liveLogs.length === 0 && dashData?.recent_events ? (
+                dashData.recent_events.slice(0, 15).map((log) => (
+                  <div key={log.id} className="flex justify-between gap-3 text-muted-foreground/80 border-b border-border/5 pb-1">
+                    <span>
+                      <span className="text-muted-foreground">[{new Date(log.timestamp).toLocaleTimeString()}]</span>{" "}
+                      <span className="text-primary font-semibold">{log.agent_name || 'Agent'}</span>:{" "}
+                      <code className="text-purple-300 font-mono">{log.tool_name}()</code>
                     </span>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[10px] font-mono', (log.risk_score ?? 0) > 70 ? 'text-danger font-bold' : 'text-muted-foreground')}>
+                        {(log.risk_score ?? 0).toFixed(0)}
+                      </span>
+                      <Badge variant={log.decision === 'ALLOWED' ? 'success' : 'danger'} className="text-[7px] leading-none px-1 py-0.5">{log.decision}</Badge>
+                    </div>
+                  </div>
+                ))
+              ) : liveLogs.map((log) => (
+                <div key={log.id} className="flex justify-between gap-3 text-muted-foreground/80 border-b border-border/5 pb-1">
+                  <span>
+                    <span className="text-muted-foreground">[{log.timestamp}]</span>{" "}
+                    <span className="text-primary font-semibold">{log.agent_name}</span>:{" "}
+                    <code className="text-purple-300 font-mono">{log.tool_name}()</code>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {log.risk_score !== null && <span className={cn('text-[10px] font-mono', (log.risk_score ?? 0) > 70 ? 'text-danger font-bold' : 'text-muted-foreground')}>{ (log.risk_score ?? 0).toFixed(0) }</span>}
+                    <Badge variant={log.decision === 'ALLOWED' ? 'success' : 'danger'} className="text-[7px] leading-none px-1 py-0.5">{log.decision}</Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+              {liveLogs.length === 0 && (!dashData?.recent_events || dashData.recent_events.length === 0) && (
+                <div className="h-full flex items-center justify-center text-muted-foreground/50">
+                  <p>Listening for agent system tool executions...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Critical Alerts Queue */}
+        <div className="lg:col-span-4">
+          <div className="rounded border bg-card overflow-hidden">
+            <div className="px-3.5 py-2 border-b bg-muted/10 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-danger" /> Critical Alerts
+              </h3>
+              <Badge variant="outline" className="font-mono text-[9px] cursor-pointer" onClick={() => navigate('/investigation')}>
+                View All
+              </Badge>
+            </div>
+            <div className="divide-y divide-border/40 max-h-[500px] overflow-y-auto">
+              {criticalQueue.map((inc) => (
+                <div key={inc.id} className="p-3 hover:bg-muted/10 cursor-pointer transition-colors" onClick={() => navigate(`/investigation?id=${inc.id}`)}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-foreground">{inc.agent_name}</span>
+                    <Badge variant="danger" className="text-[8px] font-mono">{inc.severity}</Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed break-words">{inc.trigger_reason}</p>
+                  <span className="text-[9px] text-muted-foreground block mt-1.5 font-mono">{new Date(inc.created_at || '').toLocaleString()}</span>
+                </div>
+              ))}
+              {criticalQueue.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-8">No active unresolved critical alerts</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

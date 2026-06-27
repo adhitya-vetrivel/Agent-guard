@@ -24,9 +24,9 @@ async def _init_anomaly_detector():
             n = 6 if profile.get("tool_frequency_24h", 0) > 40 else 4
             for _ in range(n):
                 noisy = [f + random.uniform(-0.5, 0.5) * max(abs(f), 1) for f in features]
-                anomaly_detector.add_sample(noisy)
+                anomaly_detector.add_sample(noisy, role=agent.role, agent_id=agent.id)
 
-        print(f"Anomaly detector initialized: {len(anomaly_detector.feature_buffer)} samples, trained={anomaly_detector.initialized}")
+        print(f"Anomaly detector initialized: {len(anomaly_detector.global_buffer)} global samples, trained={anomaly_detector.global_initialized}, roles={list(anomaly_detector.role_models.keys())}")
 
 
 async def startup_event():

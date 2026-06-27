@@ -116,6 +116,17 @@ export function useWebSocket() {
         queryClient.invalidateQueries({ queryKey: ['risk-events'] })
       } else if (message.type === 'tool_execution' || message.type === 'risk_update') {
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      } else if (message.type === 'replay_event') {
+        queryClient.invalidateQueries({ queryKey: ['replay-events'] })
+      } else if (message.type === 'operator_alert') {
+        queryClient.invalidateQueries({ queryKey: ['operator-activities'] })
+        queryClient.invalidateQueries({ queryKey: ['operator-risks'] })
+        queryClient.invalidateQueries({ queryKey: ['incidents'] })
+      } else if (message.type === 'demo_environment_started' || message.type === 'demo_environment_reset') {
+        queryClient.invalidateQueries({ queryKey: ['demo-state'] })
+        queryClient.invalidateQueries({ queryKey: ['agents'] })
+      } else if (message.type === 'explanation_generated') {
+        queryClient.invalidateQueries({ queryKey: ['risk-events'] })
       }
     }
     listeners.add(handler)

@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
 import { getToken } from '@/services/api'
 
+import { subscribe } from '@/hooks/useWebSocket'
+
 interface Notification {
   id: string
   type: 'success' | 'warning' | 'error' | 'info'
@@ -43,13 +45,8 @@ export function NotificationCenter() {
   }, [])
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) return
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/dashboard?token=${encodeURIComponent(token)}`)
-    ws.onmessage = (event) => {
+    const unsubscribe = subscribe((msg) => {
       try {
-        const msg = JSON.parse(event.data)
         const data = msg.data || msg
         const type = msg.type || data.type || ''
         const ts = data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString()
@@ -57,13 +54,12 @@ export function NotificationCenter() {
           const n: Notification = { id: `n-${Date.now()}`, type: 'error', title: 'Agent Contained', message: `${data.agent_name || 'Unknown'}: ${data.reason || 'Containment triggered'}`, timestamp: ts, read: false, link: '/incidents' }
           setNotifications((prev) => [n, ...prev].slice(0, 20))
         } else if (type === 'risk_update' && (data.risk_score || 0) > 80) {
-          const n: Notification = { id: `n-${Date.now()}`, type: 'warning', title: 'Critical Risk', message: `${data.agent_name || 'Unknown'} risk score: ${data.risk_score}`, timestamp: ts, read: false, link: '/risk-events' }
+          const n: Notification = { id: `n-${Date.now()}`, type: 'warning', title: 'Critical Risk', message: `${data.agent_name || 'Unknown'} risk score: ${data.risk_score.toFixed(0)}`, timestamp: ts, read: false, link: '/incidents' }
           setNotifications((prev) => [n, ...prev].slice(0, 20))
         }
       } catch {}
-    }
-    ws.onerror = () => {}
-    return () => ws.close()
+    })
+    return () => unsubscribe()
   }, [])
 
   const unread = notifications.filter((n) => !n.read).length

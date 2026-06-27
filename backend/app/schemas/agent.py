@@ -35,3 +35,21 @@ class AgentUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     status: Optional[str] = None
+
+
+class RiskAdjustment(BaseModel):
+    level: str
+    restriction: str
+    score_range: str
+
+
+class EffectivePermissionsResponse(BaseModel):
+    agent_id: str
+    agent_name: str
+    current_risk_score: float
+    current_status: str
+    base_permissions: list[str]
+    base_denied: list[str]
+    risk_adjustments: list[RiskAdjustment]
+    effective_restrictions: list[str]
+    effective_permissions: list[str]

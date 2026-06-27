@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from app.database.base import get_session
@@ -28,14 +28,14 @@ async def get_anomaly_dashboard(
     for agent in agents:
         profile = await behavior_service.build_behavior_profile(agent.id)
         features = anomaly_detector.extract_features(profile)
-        is_anomaly, anomaly_score = anomaly_detector.predict(features)
+        result = anomaly_detector.predict(features, role=agent.role, agent_id=agent.id)
         profiles.append({
             "agent_id": agent.id,
             "agent_name": agent.name,
             "risk_score": agent.risk_score,
             "status": agent.status.value,
-            "is_anomaly": is_anomaly,
-            "anomaly_score": round(anomaly_score, 3),
+            "is_anomaly": result["is_anomaly"],
+            "anomaly_score": result["combined_score"],
             "tool_frequency_1h": profile.get("tool_frequency_1h", 0),
             "tool_frequency_24h": profile.get("tool_frequency_24h", 0),
             "denied_requests_24h": profile.get("denied_requests_24h", 0),
@@ -72,8 +72,49 @@ async def get_anomaly_dashboard(
         "events": events,
         "total_calls": total_calls,
         "anomaly_count": anomaly_count,
-        "model_initialized": anomaly_detector.initialized,
-        "samples_collected": len(anomaly_detector.feature_buffer),
+        "model_initialized": anomaly_detector.global_initialized,
+        "samples_collected": len(anomaly_detector.global_buffer),
+    }
+
+
+@router.get("/behavior-profile/{agent_id}")
+async def get_behavior_profile(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    from app.services.agent_service import AgentService
+
+    agent_service = AgentService(session)
+    agent = await agent_service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    behavior_service = BehaviorService(session)
+    profile = await behavior_service.build_behavior_profile(agent_id)
+    features = anomaly_detector.extract_features(profile)
+
+    result = anomaly_detector.predict(features, role=agent.role, agent_id=agent.id)
+
+    return {
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_role": agent.role,
+        "risk_score": agent.risk_score,
+        "status": agent.status.value,
+        "behavior_profile": profile,
+        "expected_behavior": {
+            "typical_tool_frequency_1h": "2-10 calls",
+            "typical_tool_frequency_24h": "20-60 calls",
+            "typical_denied_rate": "< 5%",
+            "typical_diversity": "3-6 unique tools",
+        },
+        "deviation_analysis": {
+            "tool_frequency_deviation": "normal" if profile.get("tool_frequency_24h", 0) < 60 else "elevated",
+            "denied_rate_deviation": "normal" if profile.get("denied_requests_24h", 0) < 5 else "elevated",
+            "diversity_deviation": "normal" if profile.get("tool_diversity_24h", 0) >= 2 else "low",
+        },
+        **result,
     }
 
 

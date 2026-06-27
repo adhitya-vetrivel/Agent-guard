@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, ArrowRight, LayoutDashboard, Bot, ShieldCheck, ScrollText, AlertTriangle, Activity, Settings, Terminal, Brain, GitCompare, Network, Monitor, SkipForward, Clapperboard, FileText, Clock, GitBranch, Swords } from 'lucide-react'
+import { Search, ArrowRight, LayoutDashboard, Bot, ShieldCheck, ScrollText, AlertTriangle, Activity, Settings, Terminal, Brain, GitCompare, Network, Monitor, SkipForward, Clapperboard, FileText, Clock, GitBranch, Swords, Film, Eye, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CommandItem {
@@ -20,6 +20,9 @@ const commands: CommandItem[] = [
   { id: '6', label: 'Risk Events', href: '/risk-events', icon: AlertTriangle, keywords: ['risk', 'events'] },
   { id: '7', label: 'Risk Timeline', href: '/risk-timeline', icon: GitBranch, keywords: ['timeline', 'history'] },
   { id: '8', label: 'Forensic Timeline', href: '/forensic', icon: Clock, keywords: ['forensic', 'investigation'] },
+  { id: '8b', label: 'Replay Center', href: '/replay', icon: Film, keywords: ['replay', 'attack', 'cctv', 'playback'] },
+  { id: '8c', label: 'Operator Monitoring', href: '/operator-security', icon: Eye, keywords: ['operator', 'watcher', 'admin', 'human'] },
+  { id: '8d', label: 'HoneyTool Center', href: '/honeytool-center', icon: Shield, keywords: ['honeytool', 'trap', 'decoy'] },
   { id: '9', label: 'Anomaly Detection', href: '/anomaly', icon: Brain, keywords: ['anomaly', 'ml', 'ai'] },
   { id: '10', label: 'Audit Trail', href: '/audit', icon: ScrollText, keywords: ['audit', 'logs', 'compliance'] },
   { id: '11', label: 'All Agents', href: '/agents', icon: Bot, keywords: ['agents', 'list', 'agents'] },

@@ -1,26 +1,21 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from './store/auth'
 import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { AgentsPage } from './pages/AgentsPage'
-import { AgentDetailPage } from './pages/AgentDetailPage'
-import { PoliciesPage } from './pages/PoliciesPage'
-import { AuditPage } from './pages/AuditPage'
-import { RiskEventsPage } from './pages/RiskEventsPage'
-import { SystemHealthPage } from './pages/SystemHealthPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { LiveLogViewer } from './pages/LiveLogViewer'
-import { AnomalyDashboardPage } from './pages/AnomalyDashboardPage'
-import { AgentConsolePage } from './pages/AgentConsolePage'
-import { AgentComparisonPage } from './pages/AgentComparisonPage'
-import { LiveThreatGraphPage } from './pages/LiveThreatGraphPage'
-import { ScenarioPage } from './pages/ScenarioPage'
+import { AgentWorkspacePage } from './pages/AgentWorkspacePage'
+import { IncidentWorkspacePage } from './pages/IncidentWorkspacePage'
+import { DeceptionCenterPage } from './pages/DeceptionCenterPage'
+import { SimulationCenterPage } from './pages/SimulationCenterPage'
 import { DemoDirectorPage } from './pages/DemoDirectorPage'
-import { IncidentsPage } from './pages/IncidentsPage'
-import { RiskTimelinePage } from './pages/RiskTimelinePage'
-import { ForensicTimelinePage } from './pages/ForensicTimelinePage'
+import { PoliciesPage } from './pages/PoliciesPage'
+import { OperatorSecurityPage } from './pages/OperatorSecurityPage'
+import { AuditPage } from './pages/AuditPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { ArchitecturePage } from './pages/ArchitecturePage'
+import { PolicyDSLPage } from './pages/PolicyDSLPage'
+import type { Role } from '@/types'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -44,6 +39,33 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RoleRoute({ children, roles }: { children: React.ReactNode; roles: Role[] }) {
+  const user = useAuthStore((s) => s.user)
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (user.role !== 'admin' && !roles.includes(user.role)) {
+    return <Navigate to="/command-center" replace />
+  }
+
+  return <>{children}</>
+}
+
+// Redirect helpers for console/replay parameter mapping
+function RedirectConsole() {
+  const [params] = useSearchParams()
+  const agentId = params.get('agentId') || params.get('id') || ''
+  return <Navigate to={agentId ? `/fleet?id=${agentId}&tab=console` : '/fleet?tab=console'} replace />
+}
+
+function RedirectReplay() {
+  const [params] = useSearchParams()
+  const sessionId = params.get('session') || params.get('id') || ''
+  return <Navigate to={sessionId ? `/investigation?id=${sessionId}&tab=replay` : '/investigation?tab=replay'} replace />
+}
+
 export default function App() {
   const checkAuth = useAuthStore((s) => s.checkAuth)
 
@@ -62,27 +84,52 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="agents" element={<AgentsPage />} />
-        <Route path="agents/:id" element={<AgentDetailPage />} />
-        <Route path="policies" element={<PoliciesPage />} />
+        <Route index element={<Navigate to="/command-center" replace />} />
+        <Route path="command-center" element={<DashboardPage />} />
+        
+        {/* Fleet Workspace */}
+        <Route path="fleet" element={<AgentWorkspacePage />} />
+        
+        {/* Investigation Workspace */}
+        <Route path="investigation" element={<IncidentWorkspacePage />} />
+        
+        {/* Deception Center */}
+        <Route path="deception-center" element={<DeceptionCenterPage />} />
+        
+        {/* Governance */}
+        <Route path="policies" element={<RoleRoute roles={['operator', 'engineer', 'admin']}><PoliciesPage /></RoleRoute>} />
+        <Route path="operator-security" element={<RoleRoute roles={['analyst', 'operator', 'engineer', 'admin']}><OperatorSecurityPage /></RoleRoute>} />
         <Route path="audit" element={<AuditPage />} />
-        <Route path="risk-events" element={<RiskEventsPage />} />
-        <Route path="system-health" element={<SystemHealthPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="live" element={<LiveLogViewer />} />
-        <Route path="anomaly" element={<AnomalyDashboardPage />} />
-        <Route path="console" element={<AgentConsolePage />} />
-        <Route path="compare" element={<AgentComparisonPage />} />
-        <Route path="threat-graph" element={<LiveThreatGraphPage />} />
-        <Route path="scenarios" element={<ScenarioPage />} />
-        <Route path="demo-director" element={<DemoDirectorPage />} />
-        <Route path="incidents" element={<IncidentsPage />} />
-        <Route path="risk-timeline" element={<RiskTimelinePage />} />
-        <Route path="forensic" element={<ForensicTimelinePage />} />
+        <Route path="policy-dsl" element={<PolicyDSLPage />} />
+
+        {/* Simulation */}
+        <Route path="simulation-center" element={<RoleRoute roles={['demo', 'analyst', 'operator', 'engineer', 'admin']}><SimulationCenterPage /></RoleRoute>} />
+        <Route path="demo-director" element={<RoleRoute roles={['demo', 'admin']}><DemoDirectorPage /></RoleRoute>} />
+
+        {/* Settings & Architecture */}
+        <Route path="settings" element={<RoleRoute roles={['admin']}><SettingsPage /></RoleRoute>} />
+        <Route path="architecture" element={<ArchitecturePage />} />
+
+        {/* Legacy Redirect Aliases for Backward Compatibility */}
+        <Route path="dashboard" element={<Navigate to="/command-center" replace />} />
+        <Route path="agents" element={<Navigate to="/fleet" replace />} />
+        <Route path="incidents" element={<Navigate to="/investigation" replace />} />
+        <Route path="honeytools" element={<Navigate to="/deception-center" replace />} />
+        <Route path="console" element={<RedirectConsole />} />
+        <Route path="replay" element={<RedirectReplay />} />
+        <Route path="compare" element={<Navigate to="/fleet" replace />} />
+        <Route path="risk-events" element={<Navigate to="/investigation" replace />} />
+        <Route path="risk-timeline" element={<Navigate to="/investigation" replace />} />
+        <Route path="forensic" element={<Navigate to="/investigation" replace />} />
+        <Route path="honeytool-center" element={<Navigate to="/deception-center" replace />} />
+        <Route path="scenarios" element={<Navigate to="/simulation-center" replace />} />
+        <Route path="langchain" element={<Navigate to="/settings" replace />} />
+        <Route path="behavior-profile/:id" element={<RedirectConsole />} />
+        <Route path="behavior-profile" element={<Navigate to="/fleet" replace />} />
+        <Route path="risk-breakdown/:id" element={<RedirectConsole />} />
+        <Route path="risk-breakdown" element={<Navigate to="/fleet" replace />} />
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/command-center" replace />} />
     </Routes>
   )
 }

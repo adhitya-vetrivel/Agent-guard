@@ -8,13 +8,18 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { useAuthStore } from '@/store/auth'
+import { DecisionExplanation } from '@/components/DecisionExplanation'
 import type { Policy, Agent } from '@/types'
 
 export function PoliciesPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', allowed_tools: '', denied_tools: '', agent_id: '', role: '' })
+
+  const canManage = user?.role === 'admin' || user?.role === 'engineer'
 
   const { data: policies, isLoading } = useQuery<Policy[]>({ queryKey: ['policies'], queryFn: () => api.getPolicies() })
   const { data: agents } = useQuery<Agent[]>({ queryKey: ['agents'], queryFn: () => api.getAgents() })
@@ -61,21 +66,23 @@ export function PoliciesPage() {
           <h1 className="text-2xl font-bold">Policies</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Manage access control policies</p>
         </div>
-        <Dialog open={showCreate} onOpenChange={setShowCreate}>
-          <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Create Policy</Button></DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Create Policy</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><label className="text-sm font-medium">Name</label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. ResearchAgent-Restricted" /></div>
-              <div><label className="text-sm font-medium">Description</label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Restrict research tools" /></div>
-              <div><label className="text-sm font-medium">Allowed Tools</label><Input value={form.allowed_tools} onChange={(e) => setForm({ ...form, allowed_tools: e.target.value })} placeholder="web_search, read_file" /></div>
-              <div><label className="text-sm font-medium">Denied Tools</label><Input value={form.denied_tools} onChange={(e) => setForm({ ...form, denied_tools: e.target.value })} placeholder="download_customer_database" /></div>
-              <div><label className="text-sm font-medium">Apply to Agent</label><Select value={form.agent_id} onChange={(e) => setForm({ ...form, agent_id: e.target.value })} options={[{ value: '', label: 'All agents (no filter)' }, ...(agents || []).map((a) => ({ value: a.id, label: `${a.name} (${a.role})` }))]} className="w-full" /></div>
-              <div><label className="text-sm font-medium">Role Filter</label><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="e.g. research" /></div>
-              <Button onClick={() => createMutation.mutate()} className="w-full gap-2" disabled={!form.name}><ShieldCheck className="h-4 w-4" /> Create Policy</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {canManage && (
+          <Dialog open={showCreate} onOpenChange={setShowCreate}>
+            <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" /> Create Policy</Button></DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader><DialogTitle>Create Policy</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div><label className="text-sm font-medium">Name</label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. ResearchAgent-Restricted" /></div>
+                <div><label className="text-sm font-medium">Description</label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Restrict research tools" /></div>
+                <div><label className="text-sm font-medium">Allowed Tools</label><Input value={form.allowed_tools} onChange={(e) => setForm({ ...form, allowed_tools: e.target.value })} placeholder="web_search, read_file" /></div>
+                <div><label className="text-sm font-medium">Denied Tools</label><Input value={form.denied_tools} onChange={(e) => setForm({ ...form, denied_tools: e.target.value })} placeholder="download_customer_database" /></div>
+                <div><label className="text-sm font-medium">Apply to Agent</label><Select value={form.agent_id} onChange={(e) => setForm({ ...form, agent_id: e.target.value })} options={[{ value: '', label: 'All agents (no filter)' }, ...(agents || []).map((a) => ({ value: a.id, label: `${a.name} (${a.role})` }))]} className="w-full" /></div>
+                <div><label className="text-sm font-medium">Role Filter</label><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="e.g. research" /></div>
+                <Button onClick={() => createMutation.mutate()} className="w-full gap-2" disabled={!form.name}><ShieldCheck className="h-4 w-4" /> Create Policy</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -90,8 +97,8 @@ export function PoliciesPage() {
                 {policy.description && <p className="mt-1 text-sm text-muted-foreground">{policy.description}</p>}
               </div>
               <div className="flex gap-2 shrink-0">
-                <Button variant="ghost" size="sm" onClick={() => openEdit(policy)}><Pencil className="h-4 w-4" /></Button>
-                <AlertDialog>
+                {canManage && <Button variant="ghost" size="sm" onClick={() => openEdit(policy)}><Pencil className="h-4 w-4" /></Button>}
+                {canManage && <AlertDialog>
                   <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-danger"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-danger" /> Delete Policy</AlertDialogTitle>
@@ -102,7 +109,7 @@ export function PoliciesPage() {
                       <AlertDialogAction onClick={() => deleteMutation.mutate(policy.id)} className="bg-danger hover:bg-danger/90">Delete</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
-                </AlertDialog>
+                </AlertDialog>}
               </div>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -119,6 +126,24 @@ export function PoliciesPage() {
                 {policy.role && <span>Role: {policy.role}</span>}
               </div>
             )}
+            <div className="mt-3">
+              <DecisionExplanation
+                explanation={{
+                  decision: policy.denied_tools.length > 0 ? 'Policy Enforcement Active' : 'Permissive Policy',
+                  reason: policy.denied_tools.length > 0
+                    ? `${policy.role || 'Matching agents'} role does not permit access to denied tools: ${policy.denied_tools.join(', ')}.`
+                    : `Policy "${policy.name}" allows all tools${policy.allowed_tools.length ? ` except those not in: ${policy.allowed_tools.join(', ')}` : ''}.`,
+                  evidence: [
+                    policy.role ? `Applies to role: ${policy.role}` : 'Applies to all roles',
+                    policy.allowed_tools.length ? `Allowed: ${policy.allowed_tools.join(', ')}` : 'No tool restrictions',
+                    policy.denied_tools.length ? `Denied: ${policy.denied_tools.join(', ')}` : '',
+                  ].filter(Boolean),
+                  rule_triggered: policy.name,
+                  timestamp: policy.updated_at,
+                }}
+                compact
+              />
+            </div>
           </div>
         ))}
         {(!policies || policies.length === 0) && <div className="text-center py-12 text-muted-foreground">No policies created</div>}

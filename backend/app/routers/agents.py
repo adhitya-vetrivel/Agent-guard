@@ -6,10 +6,15 @@ from app.schemas.audit import AuditLogResponse
 from app.services.agent_service import AgentService
 from app.services.behavior_service import BehaviorService
 from app.services.audit_service import AuditService
+from app.services.adaptive_auth_service import AdaptiveAuthService
 from app.models.audit_log import AuditAction
 from app.security.auth import get_current_user, get_admin_user
-from app.models.user import User
+from app.security.rbac import require_any_role
+from app.models.user import User, UserRole
+from app.schemas.agent import EffectivePermissionsResponse
 import json
+
+_containment_role = Depends(require_any_role([UserRole.ANALYST, UserRole.OPERATOR, UserRole.ENGINEER, UserRole.ADMIN]))
 
 router = APIRouter(prefix="/api/agents", tags=["Agents"])
 
@@ -96,7 +101,7 @@ async def delete_agent(
 async def unquarantine_agent(
     agent_id: str,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _containment_role,
 ):
     service = AgentService(session)
     agent = await service.unquarantine_agent(agent_id)
@@ -110,6 +115,15 @@ async def unquarantine_agent(
         user_id=user.id,
         details=f"Agent {agent.name} unquarantined by admin",
     )
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="containment_action",
+        details=f"Agent '{agent.name}' ({agent_id}) unquarantined by {user.email}"
+    )
     return _agent_to_detail(agent)
 
 
@@ -117,7 +131,7 @@ async def unquarantine_agent(
 async def block_agent(
     agent_id: str,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_admin_user),
+    user: User = _containment_role,
 ):
     service = AgentService(session)
     agent = await service.block_agent(agent_id)
@@ -130,6 +144,15 @@ async def block_agent(
         agent_name=agent.name,
         user_id=user.id,
         details=f"Agent {agent.name} blocked by admin",
+    )
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="containment_action",
+        details=f"Agent '{agent.name}' ({agent_id}) blocked by {user.email}"
     )
     return _agent_to_detail(agent)
 
@@ -147,6 +170,62 @@ async def get_agent_behavior(
     behavior = BehaviorService(session)
     profile = await behavior.build_behavior_profile(agent_id)
     return profile
+
+
+@router.get("/{agent_id}/behavior-profile")
+async def get_agent_behavior_profile(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    from app.anomaly.detector import anomaly_detector
+
+    agent_service = AgentService(session)
+    agent = await agent_service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    behavior_service = BehaviorService(session)
+    profile = await behavior_service.build_behavior_profile(agent_id)
+    features = anomaly_detector.extract_features(profile)
+
+    result = anomaly_detector.predict(features, role=agent.role, agent_id=agent.id)
+
+    return {
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_role": agent.role,
+        "risk_score": agent.risk_score,
+        "status": agent.status.value,
+        "behavior_profile": profile,
+        "anomaly_scores": {
+            "global_score": result["global_score"],
+            "role_score": result["role_score"],
+            "personal_score": result["personal_score"],
+            "combined_score": result["combined_score"],
+        },
+        "is_anomaly": result["is_anomaly"],
+        "confidence_score": 1.0 - result["combined_score"],
+        "expected_behavior": {
+            "typical_tool_frequency_1h": "2-10 calls",
+            "typical_denied_rate": "< 5%",
+        },
+        "deviation": "elevated" if result["combined_score"] > 0.6 else "normal",
+    }
+
+
+@router.get("/{agent_id}/effective-permissions", response_model=EffectivePermissionsResponse)
+async def get_effective_permissions(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    service = AgentService(session)
+    agent = await service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    auth_service = AdaptiveAuthService(session)
+    return await auth_service.get_effective_permissions(agent)
 
 
 @router.get("/{agent_id}/audit", response_model=list[AuditLogResponse])

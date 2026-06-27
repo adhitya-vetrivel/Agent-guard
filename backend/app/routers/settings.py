@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request as FastAPIRequest
 from pydantic import BaseModel
 from typing import Any
 from app.security.auth import get_admin_user
 from app.models.user import User
+from app.models.audit_log import AuditAction
+from app.services.audit_service import AuditService
+from app.database.base import get_session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.config.settings import settings
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -51,10 +55,29 @@ async def get_settings(
 @router.put("")
 async def update_settings(
     data: SettingsUpdate,
-    _user: User = Depends(get_admin_user),
+    fastapi_request: FastAPIRequest,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_admin_user),
 ):
     updates = data.model_dump(exclude_none=True)
     if "containment_threshold" in updates and not (1 <= updates["containment_threshold"] <= 100):
         raise HTTPException(status_code=400, detail="Threshold must be 1-100")
     _runtime_settings.update(updates)
+    audit = AuditService(session)
+    await audit.log(
+        action=AuditAction.SETTINGS_UPDATE,
+        user_id=user.id,
+        details=f"Settings updated: {', '.join(updates.keys())}",
+        ip_address=fastapi_request.client.host if fastapi_request.client else None,
+    )
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="settings_change",
+        details=f"Settings updated by {user.email}: {', '.join(updates.keys())}",
+        ip_address=fastapi_request.client.host if fastapi_request.client else "127.0.0.1"
+    )
     return _runtime_settings

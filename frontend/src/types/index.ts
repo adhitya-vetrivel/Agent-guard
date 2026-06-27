@@ -1,8 +1,10 @@
+export type Role = 'viewer' | 'analyst' | 'operator' | 'engineer' | 'admin' | 'demo'
+
 export interface User {
   id: string
   email: string
   name: string
-  role: string
+  role: Role
 }
 
 export interface Agent {
@@ -266,4 +268,93 @@ export interface HealthData {
     tool_calls: number
     risk_events: number
   }
+}
+
+export interface DecisionExplanationData {
+  decision: string
+  reason: string
+  evidence?: string | string[]
+  rule_triggered?: string
+  risk_contribution?: number | string
+  timestamp?: string
+}
+
+export interface ReplaySession {
+  session_id: string
+  name: string
+  description: string
+  type: 'scenario' | 'incident'
+  agent_name: string
+  severity: string
+  created_at: string | null
+}
+
+export interface ReplayEvent {
+  id: string
+  session_id: string
+  step_index: number
+  timestamp: string
+  event_type: 'auth' | 'tool_call' | 'honeytool' | 'containment' | 'quarantine'
+  agent_id: string | null
+  agent_name: string | null
+  tool_name: string | null
+  details: string | null
+  risk_score: number
+  node_color: 'green' | 'amber' | 'red' | 'purple'
+}
+
+export interface OperatorActivity {
+  id: string
+  user_id: string
+  user_email: string
+  action: string
+  details: string
+  risk_delta: number
+  ip_address: string
+  is_anomalous: boolean
+  anomaly_reason: string | null
+  created_at: string
+}
+
+export interface OperatorRisk {
+  id: string
+  user_id: string
+  user_email: string
+  risk_score: number
+  anomaly_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  login_failures: number
+  policy_edits: number
+  containment_actions: number
+  role_changes: number
+  settings_changes: number
+  user_creations: number
+  export_actions: number
+  after_hours_access: number
+  last_updated: string | null
+}
+
+export interface DemoEnvironmentState {
+  is_active: boolean
+  current_scenario: string | null
+  status: 'idle' | 'running' | 'resetting'
+  runner: ScenarioState
+}
+
+export interface Incident {
+  id: string
+  agent_id: string
+  agent_name: string
+  agent_role: string
+  severity: string
+  status: string
+  trigger_reason: string
+  trigger_type: string
+  timeline: string[]
+  risk_breakdown: Record<string, number>
+  actions_taken: string[]
+  containment_status: string
+  tools_invoked: string[]
+  recommended_actions: string[]
+  created_at: string
+  resolved_at: string | null
 }

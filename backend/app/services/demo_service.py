@@ -111,28 +111,36 @@ def _generate_timestamps(count: int, burst: str) -> list[datetime]:
         return [now - timedelta(hours=h) for h in hours_ago]
 
 
+DEMO_USERS = [
+    {"email": "admin@agentguard.io", "password": "admin123", "name": "Administrator", "role": UserRole.ADMIN},
+    {"email": "analyst@agentguard.io", "password": "analyst123", "name": "Analyst", "role": UserRole.ANALYST},
+    {"email": "operator@agentguard.io", "password": "operator123", "name": "Operator", "role": UserRole.OPERATOR},
+    {"email": "viewer@agentguard.io", "password": "viewer123", "name": "Viewer", "role": UserRole.VIEWER},
+]
+
+
 async def seed_demo_data():
     async with async_session_factory() as session:
-        existing = await session.execute(select(User).where(User.email == "admin@agentguard.io"))
-        if existing.scalar_one_or_none():
-            print("Demo data already seeded")
-            return
+        # Check if new users already exist
+        existing = await session.execute(select(User).where(User.email == DEMO_USERS[0]["email"]))
+        existing_user = existing.scalar_one_or_none()
+        if existing_user:
+            # Verify existing user has correct role
+            if existing_user.role == UserRole.VIEWER or existing_user.role != UserRole.ADMIN:
+                print("Demo data already seeded (updated users)")
+                return
 
-        admin = User(
-            email="admin@agentguard.io",
-            password_hash=hash_password("admin123"),
-            name="Admin",
-            role=UserRole.ADMIN,
-        )
-        session.add(admin)
-
-        demo_user = User(
-            email="demo@agentguard.io",
-            password_hash=hash_password("demo123"),
-            name="Demo User",
-            role=UserRole.DEMO,
-        )
-        session.add(demo_user)
+        for user_data in DEMO_USERS:
+            dup = await session.execute(select(User).where(User.email == user_data["email"]))
+            if dup.scalar_one_or_none():
+                continue
+            user = User(
+                email=user_data["email"],
+                password_hash=hash_password(user_data["password"]),
+                name=user_data["name"],
+                role=user_data["role"],
+            )
+            session.add(user)
         await session.flush()
 
         agent_service = AgentService(session)
@@ -315,11 +323,11 @@ async def seed_demo_data():
             n_samples = 6 if profile["calls"] > 40 else 4
             for _ in range(n_samples):
                 noisy = [f + random.uniform(-0.5, 0.5) * max(abs(f), 1) for f in base_features]
-                anomaly_detector.add_sample(noisy)
+                anomaly_detector.add_sample(noisy, role=agent.role, agent_id=agent.id)
 
         await session.commit()
         print(f"Demo data seeded: {len(DEMO_AGENTS)} agents, ~{sum(p['calls'] for p in AGENT_PROFILES.values())} tool calls")
-        print(f"Anomaly detector: {len(anomaly_detector.feature_buffer)} samples, initialized={anomaly_detector.initialized}")
+        print(f"Anomaly detector: {len(anomaly_detector.global_buffer)} samples, initialized={anomaly_detector.global_initialized}")
 
 
 async def simulate_attack():
@@ -396,7 +404,7 @@ async def simulate_attack():
         # Update anomaly detector
         behavior_profile = await behavior_service.build_behavior_profile(agent.id)
         features = anomaly_detector.extract_features(behavior_profile)
-        anomaly_detector.add_sample(features)
+        anomaly_detector.add_sample(features, role=agent.role, agent_id=agent.id)
 
         await session.flush()
         await session.commit()
@@ -410,4 +418,134 @@ async def simulate_attack():
             "tool_name": honeytool,
             "severity": "CRITICAL",
         })
+
+        await ws_manager.broadcast("trap_activated", {
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+            "tool_name": honeytool,
+            "risk_message": f"TRAP ACTIVATED: {honeytool}",
+            "severity": "CRITICAL",
+        })
+
+        from app.services.honeytools import honeytool_tracker
+        honeytool_tracker.record_trigger(
+            tool_name=honeytool,
+            agent_id=agent.id,
+            agent_name=agent.name,
+            risk_score=100.0,
+            triggered_containment=True,
+        )
+
         print(f"Attack simulated: {agent.name} triggered {honeytool} -> contained")
+
+
+async def simulate_risk_escalation(agent_id: str = None):
+    """Simulate a gradual risk escalation for demo purposes."""
+    async with async_session_factory() as session:
+        from app.services.risk_service import RiskService
+        from app.services.risk_explanation_service import RiskExplanationService, IncidentService
+        from app.services.audit_service import AuditService
+        from app.models.audit_log import AuditAction
+        from app.models.agent import Agent, AgentStatus
+        from app.websocket.manager import ws_manager
+        from sqlalchemy import select
+
+        if agent_id:
+            result = await session.execute(select(Agent).where(Agent.id == agent_id))
+            agent = result.scalar_one_or_none()
+            if not agent:
+                return {"error": "Agent not found"}
+        else:
+            result = await session.execute(
+                select(Agent).where(Agent.is_demo == True).where(Agent.status == AgentStatus.ACTIVE)
+            )
+            agents = result.scalars().all()
+            if not agents:
+                return {"error": "No active agents found"}
+            agent = agents[0]
+
+        risk_service = RiskService(session)
+        explanation_service = RiskExplanationService(session)
+        audit_service = AuditService(session)
+
+        steps = [
+            ("escalation_step_1", 25, "Unknown tool invoked: query_database"),
+            ("escalation_step_2", 40, "Denied request: execute_command"),
+            ("escalation_step_3", 55, "Rapid burst detected: 6 calls in 10s"),
+            ("escalation_step_4", 75, "Privilege escalation attempt detected"),
+            ("escalation_step_5", 100, "HoneyTool triggered: export_all_secrets"),
+        ]
+
+        for key, score, reason in steps:
+            agent.risk_score = score
+            agent.updated_at = datetime.now(timezone.utc)
+
+            re = RiskEvent(
+                agent_id=agent.id,
+                agent_name=agent.name,
+                severity=RiskService.get_severity_static(score),
+                risk_score=float(score),
+                reason=reason,
+                tool_name="simulation",
+                triggered_containment=score > 80,
+            )
+            session.add(re)
+
+            await explanation_service.record_contribution(
+                agent_id=agent.id,
+                tool_call_id=None,
+                contributor=key,
+                score_delta=float(score),
+                running_total=float(score),
+                reason=reason,
+            )
+
+            await audit_service.log(
+                action=AuditAction.RISK_ESCALATION,
+                agent_id=agent.id,
+                agent_name=agent.name,
+                risk_score=float(score),
+                reason=reason,
+            )
+
+            await ws_manager.broadcast("risk_update", {
+                "agent_id": agent.id,
+                "agent_name": agent.name,
+                "risk_score": float(score),
+                "severity": RiskService.get_severity_static(score),
+                "reason": reason,
+                "escalation_step": key,
+            })
+
+            if score > 80:
+                agent.status = AgentStatus.QUARANTINED
+                agent.jwt_identity = None
+
+                await ws_manager.broadcast("containment", {
+                    "agent_id": agent.id,
+                    "agent_name": agent.name,
+                    "risk_score": 100.0,
+                    "reason": f"Risk escalation complete: {reason}",
+                    "severity": "CRITICAL",
+                })
+
+            await session.flush()
+
+        await session.commit()
+
+        return {
+            "status": "completed",
+            "agent_name": agent.name,
+            "final_risk": 100,
+            "steps_completed": len(steps),
+        }
+
+
+async def is_demo_mode_active(session: AsyncSession) -> bool:
+    from app.models.demo_environment import DemoEnvironment
+    from app.config.settings import settings
+    if settings.DEMO_MODE:
+        return True
+    result = await session.execute(select(DemoEnvironment))
+    env = result.scalar_one_or_none()
+    return env.is_active if env else False

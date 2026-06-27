@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from app.database.base import Base
 
 # Import ALL models so they register with Base.metadata and relationships resolve
-from app.models import user, agent, policy, tool_call, audit_log, risk_event, session, scenario, risk_contribution, incident_report, trust_edge
+from app.models import user, agent, policy, tool_call, audit_log, risk_event, session, scenario, risk_contribution, incident_report, trust_edge, operator_activity, replay_event, demo_environment
 from app.models.agent import Agent, AgentStatus
 
 

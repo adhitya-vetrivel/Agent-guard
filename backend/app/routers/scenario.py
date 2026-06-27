@@ -5,12 +5,15 @@ from typing import Optional
 
 from app.database.base import get_session
 from app.security.auth import get_current_user
-from app.models.user import User
+from app.security.rbac import require_any_role
+from app.models.user import User, UserRole
 from app.services.scenario_service import (
     scenario_runner,
     list_scenario_definitions,
     get_scenario_definition,
 )
+
+_scenario_role = Depends(require_any_role([UserRole.DEMO, UserRole.ANALYST, UserRole.OPERATOR, UserRole.ENGINEER, UserRole.ADMIN]))
 
 router = APIRouter(prefix="/api/scenarios", tags=["Scenarios"])
 
@@ -41,23 +44,23 @@ async def get_scenario(scenario_key: str, user: User = Depends(get_current_user)
 @router.post("/start")
 async def start_scenario(
     request: ScenarioStartRequest,
-    user: User = Depends(get_current_user),
+    user: User = _scenario_role,
 ):
     return await scenario_runner.start(request.scenario_key)
 
 
 @router.post("/pause")
-async def pause_scenario(user: User = Depends(get_current_user)):
+async def pause_scenario(user: User = _scenario_role):
     return await scenario_runner.pause()
 
 
 @router.post("/stop")
-async def stop_scenario(user: User = Depends(get_current_user)):
+async def stop_scenario(user: User = _scenario_role):
     return await scenario_runner.stop()
 
 
 @router.post("/reset")
-async def reset_scenario(user: User = Depends(get_current_user)):
+async def reset_scenario(user: User = _scenario_role):
     return await scenario_runner.reset_runner()
 
 

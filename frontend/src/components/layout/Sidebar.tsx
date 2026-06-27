@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
-  Shield, LayoutDashboard, Bot, ShieldCheck, ScrollText, AlertTriangle,
-  Activity, Settings, LogOut, Swords, Terminal, Brain, GitCompare, Network,
-  Monitor, SkipForward, Clapperboard, FileText, Clock, GitBranch,
-  ChevronDown, ChevronRight,
+  Shield, LayoutDashboard, Monitor, Activity, Network,
+  AlertTriangle, FileText, ScrollText, Clock, GitBranch,
+  Bot, Terminal, GitCompare, Gauge,
+  ShieldCheck, Settings, Sliders, BarChart3, Share2,
+  Clapperboard, SkipForward, Code,
+  Swords, LogOut, ChevronRight, ChevronDown, Film, Eye,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { api } from '@/services/api'
@@ -15,52 +17,52 @@ interface SidebarProps {
   onClose: () => void
 }
 
+interface NavItem {
+  href: string
+  label: string
+  icon: typeof LayoutDashboard
+}
+
 interface NavSection {
   label: string
-  items: { href: string; label: string; icon: typeof LayoutDashboard }[]
+  items: NavItem[]
 }
 
 const navSections: NavSection[] = [
   {
-    label: 'Monitor',
+    label: 'Command',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/live', label: 'Live Logs', icon: Terminal },
-      { href: '/system-health', label: 'System Health', icon: Activity },
-      { href: '/threat-graph', label: 'Threat Graph', icon: Network },
+      { href: '/command-center', label: 'Command Center', icon: LayoutDashboard },
     ],
   },
   {
-    label: 'Security',
+    label: 'Operations',
     items: [
-      { href: '/incidents', label: 'Incidents', icon: FileText },
-      { href: '/risk-events', label: 'Risk Events', icon: AlertTriangle },
-      { href: '/risk-timeline', label: 'Risk Timeline', icon: GitBranch },
-      { href: '/forensic', label: 'Forensic Timeline', icon: Clock },
-      { href: '/anomaly', label: 'Anomaly Detection', icon: Brain },
-      { href: '/audit', label: 'Audit Trail', icon: ScrollText },
+      { href: '/fleet', label: 'Fleet', icon: Bot },
+      { href: '/investigation', label: 'Investigation', icon: FileText },
+      { href: '/deception-center', label: 'Deception Center', icon: Shield },
     ],
   },
   {
-    label: 'Agents',
-    items: [
-      { href: '/agents', label: 'All Agents', icon: Bot },
-      { href: '/console', label: 'Agent Console', icon: Monitor },
-      { href: '/compare', label: 'Agent Comparison', icon: GitCompare },
-    ],
-  },
-  {
-    label: 'Configuration',
+    label: 'Governance',
     items: [
       { href: '/policies', label: 'Policies', icon: ShieldCheck },
-      { href: '/settings', label: 'Settings', icon: Settings },
+      { href: '/operator-security', label: 'Operator Security', icon: Eye },
+      { href: '/audit', label: 'Audit', icon: ScrollText },
     ],
   },
   {
-    label: 'Demos',
+    label: 'Simulation',
     items: [
+      { href: '/simulation-center', label: 'Simulation Center', icon: Terminal },
       { href: '/demo-director', label: 'Demo Director', icon: Clapperboard },
-      { href: '/scenarios', label: 'Attack Scenarios', icon: SkipForward },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { href: '/settings', label: 'Settings', icon: Settings },
+      { href: '/architecture', label: 'Architecture', icon: Network },
     ],
   },
 ]
@@ -68,9 +70,24 @@ const navSections: NavSection[] = [
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
+  const user = useAuthStore((s) => s.user)
   const [simulating, setSimulating] = useState(false)
   const [simResult, setSimResult] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+
+  const filteredSections = navSections
+    .map((section) => {
+      const items = section.items.filter((item) => {
+        if (item.href === '/settings') return user?.role === 'admin'
+        if (item.href === '/policies') return user?.role === 'admin' || user?.role === 'operator' || user?.role === 'engineer'
+        if (item.href === '/operator-security') return user?.role === 'admin' || user?.role === 'operator' || user?.role === 'engineer' || user?.role === 'analyst'
+        if (item.href === '/demo-director') return user?.role === 'admin' || user?.role === 'demo'
+        if (item.href === '/simulation-center') return user?.role === 'admin' || user?.role === 'demo' || user?.role === 'analyst' || user?.role === 'operator' || user?.role === 'engineer'
+        return true
+      })
+      return { ...section, items }
+    })
+    .filter((s) => s.items.length > 0)
 
   const simulateAttack = async () => {
     if (simulating) return
@@ -107,7 +124,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   }
 
   const isActive = (href: string) => {
-    if (href === '/dashboard') return location.pathname === '/dashboard'
+    if (href === '/command-center') return location.pathname === '/command-center'
     return location.pathname.startsWith(href)
   }
 
@@ -115,12 +132,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen w-56 border-r border-border bg-card transition-transform duration-150 ease-in-out lg:translate-x-0 overflow-y-auto',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed left-0 top-0 z-40 h-screen border-r border-border bg-background transition-transform duration-150 ease-in-out lg:translate-x-0 overflow-y-auto',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'w-[280px]'
         )}
       >
         <div className="flex h-full flex-col">
-          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
             <Shield className="h-5 w-5 text-primary" />
             <div>
               <h1 className="text-sm font-semibold text-foreground">AgentGuard</h1>
@@ -128,16 +146,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </div>
 
-          <nav className="flex-1 py-2 px-2 space-y-0.5">
-            {navSections.map((section) => {
+          <nav className="flex-1 py-3 px-3 space-y-1">
+            {filteredSections.map((section) => {
               const sectionActive = section.items.some((item) => isActive(item.href))
               const collapsed = collapsedSections.has(section.label)
               return (
-                <div key={section.label} className="mb-1">
+                <div key={section.label} className="mb-0.5">
                   <button
                     onClick={() => toggleSection(section.label)}
                     className={cn(
-                      "flex w-full items-center gap-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors rounded",
+                      "flex w-full items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors rounded",
                       sectionActive && !collapsed && "text-foreground"
                     )}
                   >
@@ -145,7 +163,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     {section.label}
                   </button>
                   {!collapsed && (
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 mt-0.5">
                       {section.items.map((item) => {
                         const active = isActive(item.href)
                         return (
@@ -154,7 +172,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             to={item.href}
                             onClick={onClose}
                             className={cn(
-                              'flex items-center gap-2.5 rounded-md px-3 py-1.5 text-sm transition-colors',
+                              'flex items-center gap-2.5 rounded px-3 py-1.5 text-sm transition-colors',
                               active
                                 ? 'bg-accent text-foreground font-medium'
                                 : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
@@ -176,7 +194,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <button
               onClick={simulateAttack}
               disabled={simulating}
-              className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-danger hover:bg-danger/10 disabled:opacity-50"
+              className="flex w-full items-center gap-2.5 rounded px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-danger hover:bg-danger/10 disabled:opacity-50"
             >
               <Swords className={`h-4 w-4 shrink-0 ${simulating ? 'animate-spin' : ''}`} />
               {simulating ? 'Simulating...' : 'Simulate Attack'}
@@ -188,7 +206,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             )}
             <button
               onClick={() => { logout(); onClose() }}
-              className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
+              className="flex w-full items-center gap-2.5 rounded px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
             >
               <LogOut className="h-4 w-4 shrink-0" />
               Logout

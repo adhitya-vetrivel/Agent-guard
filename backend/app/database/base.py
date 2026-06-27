@@ -25,5 +25,5 @@ async def get_session() -> AsyncSession:
 
 async def init_db():
     async with engine.begin() as conn:
-        from app.models import user, agent, policy, tool_call, audit_log, risk_event, session, scenario, risk_contribution, incident_report, trust_edge  # noqa
+        from app.models import user, agent, policy, tool_call, audit_log, risk_event, session, scenario, risk_contribution, incident_report, trust_edge, operator_activity, replay_event, demo_environment  # noqa
         await conn.run_sync(Base.metadata.create_all)

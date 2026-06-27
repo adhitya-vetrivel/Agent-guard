@@ -26,12 +26,16 @@ class AgentService:
         return agent
 
     async def get_agent(self, agent_id: str) -> Agent | None:
-        result = await self.session.execute(select(Agent).where(Agent.id == agent_id))
+        from app.services.demo_service import is_demo_mode_active
+        is_demo = await is_demo_mode_active(self.session)
+        result = await self.session.execute(select(Agent).where(Agent.id == agent_id, Agent.is_demo == is_demo))
         return result.scalar_one_or_none()
 
     async def get_agents(self, skip: int = 0, limit: int = 100) -> list[Agent]:
+        from app.services.demo_service import is_demo_mode_active
+        is_demo = await is_demo_mode_active(self.session)
         result = await self.session.execute(
-            select(Agent).offset(skip).limit(limit).order_by(Agent.created_at.desc())
+            select(Agent).where(Agent.is_demo == is_demo).offset(skip).limit(limit).order_by(Agent.created_at.desc())
         )
         return list(result.scalars().all())
 

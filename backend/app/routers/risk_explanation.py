@@ -19,3 +19,29 @@ async def get_risk_explanation(
     if "error" in explanation:
         raise HTTPException(status_code=404, detail=explanation["error"])
     return explanation
+
+
+@router.get("/{agent_id}/waterfall")
+async def get_risk_waterfall(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    service = RiskExplanationService(session)
+    data = await service.get_waterfall_data(agent_id)
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
+
+@router.get("/{agent_id}/contributors")
+async def get_risk_contributors(
+    agent_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    service = RiskExplanationService(session)
+    data = await service.get_top_contributors(agent_id)
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data

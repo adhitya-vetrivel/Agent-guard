@@ -49,9 +49,27 @@ async def list_incidents(
         })
 
     if export == "json":
+        from app.services.operator_service import OperatorSecurityService
+        op_service = OperatorSecurityService(session)
+        await op_service.log_activity(
+            user_id=user.id,
+            user_email=user.email,
+            user_role=user.role.value,
+            action="export_action",
+            details="Operator exported incidents list as JSON"
+        )
         return Response(content=json.dumps(result, indent=2), media_type="application/json",
                         headers={"Content-Disposition": "attachment; filename=incidents.json"})
     if export == "csv":
+        from app.services.operator_service import OperatorSecurityService
+        op_service = OperatorSecurityService(session)
+        await op_service.log_activity(
+            user_id=user.id,
+            user_email=user.email,
+            user_role=user.role.value,
+            action="export_action",
+            details="Operator exported incidents list as CSV"
+        )
         import csv, io
         output = io.StringIO()
         writer = csv.writer(output)
@@ -92,3 +110,34 @@ async def get_incident(
         "created_at": inc.created_at.isoformat() if inc.created_at else None,
         "resolved_at": inc.resolved_at.isoformat() if inc.resolved_at else None,
     }
+
+
+@router.post("/{incident_id}/resolve")
+async def resolve_incident(
+    incident_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    from app.models.incident_report import IncidentReport, IncidentStatus
+    from sqlalchemy import select
+    from datetime import datetime, timezone
+    result = await session.execute(select(IncidentReport).where(IncidentReport.id == incident_id))
+    inc = result.scalar_one_or_none()
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    inc.status = IncidentStatus.RESOLVED
+    inc.resolved_at = datetime.now(timezone.utc)
+    await session.commit()
+    
+    # Audit log resolution
+    from app.services.operator_service import OperatorSecurityService
+    op_service = OperatorSecurityService(session)
+    await op_service.log_activity(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role.value,
+        action="resolve_incident",
+        details=f"Operator resolved incident {incident_id}"
+    )
+    
+    return {"status": "ok", "message": "Incident resolved."}

@@ -5,7 +5,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from app.config.settings import settings
 from app.core.events import startup_event
 from app.security.rate_limit import rate_limiter
-from app.routers import auth, agents, execute, policies, audit, risk, dashboard, websocket_route, settings as settings_router, anomaly, compare, scenario, verify, risk_explanation, incidents, trust_graph, policy_dsl, agent_identity
+from app.routers import auth, agents, execute, policies, audit, risk, dashboard, websocket_route, settings as settings_router, anomaly, compare, scenario, verify, risk_explanation, incidents, trust_graph, policy_dsl, agent_identity, honeytools, users, operator, demo, replay
 from sqlalchemy import select, func
 from app.database.base import async_session_factory
 from app.models.agent import Agent
@@ -65,6 +65,11 @@ app.include_router(incidents.router)
 app.include_router(trust_graph.router)
 app.include_router(policy_dsl.router)
 app.include_router(agent_identity.router)
+app.include_router(honeytools.router)
+app.include_router(users.router)
+app.include_router(operator.router)
+app.include_router(demo.router)
+app.include_router(replay.router)
 
 
 @app.get("/api/health")

@@ -17,6 +17,17 @@ async def login(request: LoginRequest, session: AsyncSession = Depends(get_sessi
     result = await session.execute(select(User).where(User.email == request.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(request.password, user.password_hash):
+        if user:
+            from app.services.operator_service import OperatorSecurityService
+            op_service = OperatorSecurityService(session)
+            await op_service.log_activity(
+                user_id=user.id,
+                user_email=user.email,
+                user_role=user.role.value,
+                action="login_failure",
+                details=f"Failed login attempt for {user.email}",
+                is_login_failure=True
+            )
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")

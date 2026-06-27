@@ -1,5 +1,6 @@
 import time
 import json
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request as FastAPIRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.base import get_session
@@ -8,6 +9,7 @@ from app.services.agent_service import AgentService
 from app.services.policy_service import PolicyService
 from app.services.behavior_service import BehaviorService
 from app.services.risk_service import RiskService
+from app.services.adaptive_auth_service import AdaptiveAuthService
 from app.services.honeytools import is_honeytool, get_honeytool_response
 from app.services.audit_service import AuditService
 from app.models.audit_log import AuditAction
@@ -49,6 +51,13 @@ async def execute_tool(
     honeytool = is_honeytool(tool_name)
 
     policy_allowed, policy_reason = await policy_service.check_tool_allowed(agent, tool_name)
+
+    adaptive_auth = AdaptiveAuthService(session)
+    adaptive_allowed, adaptive_reason = await adaptive_auth.check_tool_allowed_adaptive(agent, tool_name)
+
+    if policy_allowed and not adaptive_allowed:
+        policy_allowed = False
+        policy_reason = adaptive_reason
 
     if honeytool:
         risk_score, risk_reasons = await risk_service.calculate_risk(agent, tool_name, False, True)
@@ -130,10 +139,23 @@ async def execute_tool(
             "tool_name": tool_name,
         })
 
+    # Track honeytool trigger
+    if honeytool:
+        from app.services.honeytools import honeytool_tracker
+        honeytool_tracker.record_trigger(
+            tool_name=tool_name,
+            agent_id=agent.id,
+            agent_name=agent.name,
+            risk_score=risk_score,
+            triggered_containment=containment_event is not None,
+        )
+
     behavior_profile = await behavior_service.build_behavior_profile(agent.id)
     features = anomaly_detector.extract_features(behavior_profile)
-    anomaly_detector.add_sample(features)
-    is_anomaly, anomaly_score = anomaly_detector.predict(features)
+    anomaly_detector.add_sample(features, role=agent.role, agent_id=agent.id)
+    anomaly_prediction = anomaly_detector.predict(features, role=agent.role, agent_id=agent.id)
+    is_anomaly = anomaly_prediction["is_anomaly"]
+    anomaly_score = anomaly_prediction["combined_score"]
 
     audit_action = AuditAction.TOOL_EXECUTE if decision == "ALLOWED" else AuditAction.TOOL_DENIED
     if honeytool:
@@ -155,6 +177,9 @@ async def execute_tool(
             "anomaly_detected": is_anomaly,
             "anomaly_score": round(anomaly_score, 3),
             "containment": containment_event is not None,
+            "global_anomaly_score": round(anomaly_prediction.get("global_score", 0), 3),
+            "role_anomaly_score": round(anomaly_prediction.get("role_score", 0), 3),
+            "personal_anomaly_score": round(anomaly_prediction.get("personal_score", 0), 3),
         }),
         user_id=user.id,
     )
@@ -174,6 +199,23 @@ async def execute_tool(
         "agent_name": agent.name,
         "risk_score": risk_score,
         "severity": risk_service.get_severity(risk_score).value,
+        "reason": reason,
+        "tool_name": tool_name,
+        "decision": decision,
+    })
+
+    await ws_manager.broadcast("explanation_generated", {
+        "type": "tool_decision",
+        "decision": decision,
+        "reason": reason or f"Tool {tool_name} evaluated against active policies.",
+        "evidence": [
+            f"Agent: {agent.name} ({agent.role})",
+            f"Tool: {tool_name}()",
+            f"Risk score: {risk_score:.0f}",
+        ],
+        "rule_triggered": "honeytool_decoy" if honeytool else ("containment_threshold" if containment_event else "policy_evaluation"),
+        "risk_contribution": risk_score,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     await session.flush()

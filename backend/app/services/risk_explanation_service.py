@@ -111,6 +111,94 @@ class RiskExplanationService:
             ],
         }
 
+    async def get_waterfall_data(self, agent_id: str) -> dict:
+        """Get waterfall chart data showing incremental risk contributions."""
+        agent = await self.session.execute(select(Agent).where(Agent.id == agent_id))
+        agent = agent.scalar_one_or_none()
+        if not agent:
+            return {"error": "Agent not found"}
+
+        contribs = await self.session.execute(
+            select(RiskContribution)
+            .where(RiskContribution.agent_id == agent_id)
+            .order_by(RiskContribution.created_at.asc())
+        )
+        contributions = contribs.scalars().all()
+
+        waterfall = []
+        running = 0.0
+        for c in contributions:
+            waterfall.append({
+                "name": c.contributor.replace("_", " ").title(),
+                "delta": c.score_delta,
+                "running_total": c.running_total,
+                "severity": c.severity,
+                "reason": c.reason,
+                "timestamp": c.created_at.isoformat() if c.created_at else None,
+            })
+            running = c.running_total
+
+        return {
+            "agent_id": agent.id,
+            "current_risk": agent.risk_score,
+            "waterfall": waterfall,
+            "total_contributors": len(set(c.contributor for c in contributions)),
+            "total_events": len(contributions),
+        }
+
+    async def get_top_contributors(self, agent_id: str) -> dict:
+        """Get aggregated top contributors to risk score."""
+        agent = await self.session.execute(select(Agent).where(Agent.id == agent_id))
+        agent = agent.scalar_one_or_none()
+        if not agent:
+            return {"error": "Agent not found"}
+
+        contribs = await self.session.execute(
+            select(RiskContribution)
+            .where(RiskContribution.agent_id == agent_id)
+            .order_by(RiskContribution.created_at.asc())
+        )
+        contributions = contribs.scalars().all()
+
+        breakdown: dict[str, dict] = {}
+        total_delta = 0.0
+        for c in contributions:
+            if c.contributor not in breakdown:
+                breakdown[c.contributor] = {
+                    "factor": c.contributor.replace("_", " ").title(),
+                    "total_delta": 0.0,
+                    "count": 0,
+                    "last_timestamp": None,
+                    "severity": c.severity,
+                }
+            breakdown[c.contributor]["total_delta"] += c.score_delta
+            breakdown[c.contributor]["count"] += 1
+            breakdown[c.contributor]["last_timestamp"] = c.created_at.isoformat() if c.created_at else None
+            if c.severity:
+                severities = {"SAFE": 0, "WARNING": 1, "HIGH": 2, "CRITICAL": 3}
+                current = severities.get(breakdown[c.contributor]["severity"], 0)
+                new = severities.get(c.severity, 0)
+                if new > current:
+                    breakdown[c.contributor]["severity"] = c.severity
+            total_delta += c.score_delta
+
+        for key in breakdown:
+            if total_delta > 0:
+                breakdown[key]["percentage"] = round((breakdown[key]["total_delta"] / total_delta) * 100, 1)
+            else:
+                breakdown[key]["percentage"] = 0.0
+
+        sorted_contributors = sorted(breakdown.values(), key=lambda x: x["total_delta"], reverse=True)
+
+        return {
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+            "current_risk_score": agent.risk_score,
+            "total_risk_delta": round(total_delta, 2),
+            "top_contributors": sorted_contributors,
+            "contributor_count": len(sorted_contributors),
+        }
+
 
 class IncidentService:
     def __init__(self, session: AsyncSession):
@@ -197,7 +285,14 @@ class IncidentService:
         agent_id: str | None = None,
     ) -> list[Any]:
         from app.models.incident_report import IncidentReport
-        query = select(IncidentReport)
+        from app.models.agent import Agent
+        from app.services.demo_service import is_demo_mode_active
+        from sqlalchemy import or_
+        is_demo = await is_demo_mode_active(self.session)
+
+        query = select(IncidentReport).join(Agent, IncidentReport.agent_id == Agent.id, isouter=True).where(
+            or_(Agent.is_demo == is_demo, IncidentReport.agent_id == None)
+        )
         if severity:
             query = query.where(IncidentReport.severity == severity.upper())
         if status:
@@ -210,5 +305,13 @@ class IncidentService:
 
     async def get_incident(self, incident_id: str) -> Any | None:
         from app.models.incident_report import IncidentReport
-        result = await self.session.execute(select(IncidentReport).where(IncidentReport.id == incident_id))
+        from app.models.agent import Agent
+        from app.services.demo_service import is_demo_mode_active
+        from sqlalchemy import or_
+        is_demo = await is_demo_mode_active(self.session)
+        result = await self.session.execute(
+            select(IncidentReport)
+            .join(Agent, IncidentReport.agent_id == Agent.id, isouter=True)
+            .where(IncidentReport.id == incident_id, or_(Agent.is_demo == is_demo, IncidentReport.agent_id == None))
+        )
         return result.scalar_one_or_none()

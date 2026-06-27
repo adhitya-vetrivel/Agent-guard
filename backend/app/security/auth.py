@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config.settings import settings
 from app.database.base import get_session
-from app.models.user import User
+from app.models.user import User, UserRole
 
 security = HTTPBearer()
 
@@ -62,6 +62,6 @@ async def get_current_user(
 
 
 async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role.value != "admin":
+    if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user

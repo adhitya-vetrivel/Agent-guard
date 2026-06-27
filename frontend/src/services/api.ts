@@ -115,6 +115,9 @@ export const api = {
 
   getRiskEvents: () => request<import('../types').RiskEvent[]>('/risk-events'),
 
+  resolveIncident: (id: string) =>
+    request<{ status: string; message: string }>(`/incidents/${id}/resolve`, { method: 'POST' }),
+
   clearRiskEvents: () =>
     request<{ message: string }>('/risk-events/clear', { method: 'DELETE' }),
 
@@ -157,4 +160,82 @@ export const api = {
 
   getScenarioState: () =>
     request<{ status: string; scenario_key: string; current_step: number; total_steps: number; elapsed_seconds: number; current_label: string }>('/scenarios/state'),
+
+  getHoneyTools: () => request<{ honeytools: any[]; by_type: Record<string, any[]>; stats: any }>('/honeytools'),
+
+  getHoneyToolTriggers: () => request<{ triggers: any[]; containment_events: any[]; in_memory_stats: any }>('/honeytools/triggers'),
+
+  getAgentBehaviorProfile: (id: string) => request<any>(`/agents/${id}/behavior-profile`),
+
+  getRiskWaterfall: (agentId: string) => request<any>(`/risk/${agentId}/waterfall`),
+
+  getRiskContributors: (agentId: string) => request<any>(`/risk/${agentId}/contributors`),
+
+  getEffectivePermissions: (id: string) => request<any>(`/agents/${id}/effective-permissions`),
+
+  toggleHoneytool: (name: string) =>
+    request<{ name: string; enabled: boolean }>(`/honeytools/${name}/toggle`, { method: 'POST' }),
+
+  updateHoneytoolConfig: (name: string, config: { severity_override?: string; containment_override?: boolean | null }) =>
+    request<{ name: string; config: any }>(`/honeytools/${name}/config`, { method: 'POST', body: JSON.stringify(config) }),
+
+  getHoneytoolState: () => request<Record<string, { enabled: boolean; severity_override: string | null; containment_override: boolean | null; definition: any }>>('/honeytools/state'),
+
+  getTrustGraph: () => request<{ nodes: any[]; edges: { source: string; target: string; relationship: string; trust_level: number }[] }>('/trust-graph'),
+
+  createTrustEdge: (data: { parent_agent_id: string; child_agent_id: string; relationship?: string; delegated_permissions?: string[]; trust_inheritance?: boolean; trust_level?: number; ttl_hours?: number }) =>
+    request<{ id: string; status: string }>('/trust-graph/edges', { method: 'POST', body: JSON.stringify(data) }),
+
+  deleteTrustEdge: (id: string) =>
+    request<{ status: string }>(`/trust-graph/edges/${id}`, { method: 'DELETE' }),
+
+  validatePolicyDSL: (source: string) =>
+    request<{ valid: boolean; errors: { line: number; message: string }[] }>('/policy-dsl/validate', { method: 'POST', body: JSON.stringify({ source }) }),
+
+  compilePolicyDSL: (source: string) =>
+    request<{ rules: any[]; rule_count: number }>('/policy-dsl/compile', { method: 'POST', body: JSON.stringify({ source }) }),
+
+  getRiskExplanation: (agentId: string) =>
+    request<any>(`/risk/${agentId}/explanation`),
+
+  getReplaySessions: () =>
+    request<import('../types').ReplaySession[]>('/replays'),
+
+  getReplayEvents: (sessionId: string) =>
+    request<import('../types').ReplayEvent[]>(`/replays/${sessionId}`),
+
+  exportReplay: async (sessionId: string, format: 'json' | 'csv') => {
+    const headers: Record<string, string> = {}
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+    const response = await fetch(`${BASE_URL}/replays/${sessionId}/export?format=${format}`, { headers })
+    if (!response.ok) throw new Error('Export failed')
+    return response.blob()
+  },
+
+  getOperatorActivities: (skip = 0, limit = 50) =>
+    request<import('../types').OperatorActivity[]>(`/operator/activities?skip=${skip}&limit=${limit}`),
+
+  getOperatorRisks: () =>
+    request<import('../types').OperatorRisk[]>('/operator/risks'),
+
+  resetOperatorMonitoring: () =>
+    request<{ status: string; message: string }>('/operator/reset', { method: 'POST' }),
+
+  getDemoState: () =>
+    request<import('../types').DemoEnvironmentState>('/demo/state'),
+
+  enterDemoEnvironment: () =>
+    request<{ status: string; message: string }>('/demo/enter', { method: 'POST' }),
+
+  exitDemoEnvironment: () =>
+    request<{ status: string; message: string }>('/demo/exit', { method: 'POST' }),
+
+  resetDemoEnvironment: () =>
+    request<{ status: string; message: string }>('/demo/reset', { method: 'POST' }),
+
+  launchDemoScenario: (scenarioKey: string) =>
+    request<{ status: string; scenario_key: string; detail: unknown }>(
+      `/demo/scenario/launch?scenario_key=${encodeURIComponent(scenarioKey)}`,
+      { method: 'POST' }
+    ),
 }
