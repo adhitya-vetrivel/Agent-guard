@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Shield, Activity, Database, Save, RotateCcw, Palette } from 'lucide-react'
+import { Shield, Activity, Database, Save, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '@/services/api'
 import { Badge } from '@/components/ui/badge'
@@ -82,26 +82,7 @@ export function SettingsPage() {
           <h3 className="mb-3 font-semibold flex items-center gap-2"><Activity className="h-5 w-5 text-warning" /> Detection</h3>
           <div className="space-y-2">{field('Rapid Burst Penalty', 'rapid_burst_penalty')}{field('Privilege Escalation Penalty', 'privilege_escalation_penalty')}{field('Anomaly Contamination', 'anomaly_contamination')}{toggleField('Demo Mode', 'demo_mode')}</div>
         </div>
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="mb-3 font-semibold flex items-center gap-2"><Palette className="h-5 w-5 text-primary" /> Theme</h3>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-lg bg-muted/20 p-3">
-              <span className="text-sm">Color Palette</span>
-              <Select value={(edits.active_palette !== undefined ? edits : settings)?.active_palette || 'cyberpunk'}
-                onChange={(e) => setEdits((prev) => ({ ...prev, active_palette: e.target.value }))}
-                options={(settings?.available_palettes || []).map((p) => ({ value: p.id, label: p.name }))} className="w-40" />
-            </div>
-            <div className="flex gap-2 px-1">
-              {(settings?.available_palettes || []).map((p) => {
-                const active = (edits.active_palette !== undefined ? edits : settings)?.active_palette === p.id
-                const hue = p.primary.split(' ')[0]
-                return <button key={p.id} onClick={() => setEdits((prev) => ({ ...prev, active_palette: p.id }))}
-                  className={`flex-1 h-10 rounded-lg border-2 transition-all ${active ? 'border-foreground scale-105' : 'border-border'}`}
-                  style={{ backgroundColor: `hsl(${hue}, 100%, 50%)` }} title={p.name} />
-              })}
-            </div>
-          </div>
-        </div>
+
         <div className="rounded-lg border bg-card p-4">
           <h3 className="mb-3 font-semibold flex items-center gap-2"><Database className="h-5 w-5 text-primary" /> System Info</h3>
           <div className="space-y-2">

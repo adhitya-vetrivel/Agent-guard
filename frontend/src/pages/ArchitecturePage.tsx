@@ -20,7 +20,7 @@ const iconMap: Record<string, React.ReactNode> = {
 function CustomNode({ data }: { data: any }) {
   const Icon = iconMap[data.icon] || null
   return (
-    <div className="rounded border border-border bg-card p-3 shadow-xs w-52 text-left font-mono text-xs">
+    <div className="relative rounded border border-border bg-card p-3 shadow-xs w-52 text-left font-mono text-xs">
       <div className="flex items-center gap-1.5 text-foreground font-bold">
         <span className="text-muted-foreground shrink-0">{Icon}</span>
         <span>{data.label}</span>
