@@ -63,7 +63,7 @@ function RedirectConsole() {
 function RedirectReplay() {
   const [params] = useSearchParams()
   const sessionId = params.get('session') || params.get('id') || ''
-  return <Navigate to={sessionId ? `/investigation?id=${sessionId}&tab=replay` : '/investigation?tab=replay'} replace />
+  return <Navigate to={sessionId ? `/investigation?id=${sessionId}&tab=storyline` : '/investigation?tab=storyline'} replace />
 }
 
 export default function App() {
